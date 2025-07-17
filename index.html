@@ -77,7 +77,7 @@
                 </button>
             </div>
         </div>
-        <!-- Touch Controls for Mobile (Fallback) -->
+        <!-- Touch Controls for Mobile -->
         <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
             <button id="touch-left" class="touch-button text-xl">&#9664;</button>
             <button id="touch-jump" class="touch-button text-2xl">&#9650;</button>
@@ -107,6 +107,9 @@
             // Game state
             let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore;
             const PIXEL_SCALE = 4;
+            
+            // OPTIMIZATION: Off-screen canvas for the background
+            let backgroundCanvas = null;
 
             // Player properties
             const playerWidth = 20;
@@ -141,6 +144,36 @@
                 canvasWidth = canvas.width;
                 canvasHeight = canvas.height;
                 ctx.imageSmoothingEnabled = false;
+                // Re-create the background canvas on resize
+                createBackgroundCanvas();
+            }
+            
+            // OPTIMIZATION: Function to pre-render the background
+            function createBackgroundCanvas() {
+                backgroundCanvas = document.createElement('canvas');
+                backgroundCanvas.width = canvasWidth;
+                backgroundCanvas.height = canvasHeight;
+                const bgCtx = backgroundCanvas.getContext('2d');
+                bgCtx.imageSmoothingEnabled = false;
+
+                const beerColor1 = '#FBBF24';
+                const beerColor2 = '#F59E0B';
+                const foamColor1 = '#FFFFFF';
+                const foamColor2 = '#fde68a';
+                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
+
+                for (let y = foamLine; y < canvasHeight; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
+                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                    }
+                }
+                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        bgCtx.fillStyle = (Math.random() > 0.3) ? foamColor1 : foamColor2;
+                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                    }
+                }
             }
 
             function init() {
@@ -229,27 +262,6 @@
                 }
             }
 
-            function drawPixelBackground() {
-                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-                const beerColor1 = '#FBBF24';
-                const beerColor2 = '#F59E0B';
-                const foamColor1 = '#FFFFFF';
-                const foamColor2 = '#fde68a';
-                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
-                for (let y = foamLine; y < canvasHeight; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
-                        ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        ctx.fillStyle = (Math.random() > 0.3) ? foamColor1 : foamColor2;
-                        ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-            }
-
             function drawPixelBubble(bubble) {
                 const x = Math.floor(bubble.x / PIXEL_SCALE) * PIXEL_SCALE;
                 const y = Math.floor(bubble.y / PIXEL_SCALE) * PIXEL_SCALE;
@@ -297,7 +309,10 @@
             
             function gameLoop() {
                 if (gameOver) return;
-                drawPixelBackground();
+                
+                // OPTIMIZATION: Draw the pre-rendered background image
+                ctx.drawImage(backgroundCanvas, 0, 0);
+
                 movePlayer();
                 drawPlayer();
                 handleBubbles();
