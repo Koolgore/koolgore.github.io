@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beer Jumper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+            touch-action: none; /* Disable touch scrolling on the body */
+        }
+        canvas {
+            background-color: #000;
+            display: block;
+            margin: 0 auto;
+            cursor: pointer;
+            image-rendering: pixelated; /* Ensures crisp pixels */
+        }
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
+        }
+        .touch-button {
+            background-color: #fb923c; /* orange-400 */
+            color: white;
+            border-radius: 9999px; /* rounded-full */
+            border: 3px solid #f97316; /* orange-500 */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            user-select: none; /* Prevent text selection */
+            width: 60px; /* Shrunk UI */
+            height: 60px; /* Shrunk UI */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .touch-button:active {
+            background-color: #f97316; /* orange-500 */
+            transform: translateY(2px);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex items-center justify-center h-screen">
+
+    <div id="game-container" class="w-full h-full">
+        <h1 class="text-2xl md:text-3xl mb-2 text-amber-300">Beer Jumper</h1>
+        <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- Game Over Screen -->
+            <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
+                <h2 class="text-5xl text-red-500 mb-4">Popped!</h2>
+                <p id="newHighScoreText" class="text-2xl text-yellow-300 mb-2 hidden">New High Score!</p>
+                <p class="text-xl text-white mb-2">You Survived: <span id="finalScore">0</span></p>
+                <p class="text-xl text-white mb-6">High Score: <span id="highScore">0</span></p>
+                <button id="restartButton" class="px-8 py-4 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-xl">
+                    Try Again
+                </button>
+            </div>
+
+            <!-- Start Screen -->
+            <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
+                <h2 id="startTitle" class="text-3xl text-white mb-4"></h2>
+                <h3 id="startSubtitle" class="text-3xl text-white mb-8"></h3>
+                <button id="startButton" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-2xl animate-pulse">
+                    Start Game
+                </button>
+            </div>
+        </div>
+        <!-- Touch Controls for Mobile (Fallback) -->
+        <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
+            <button id="touch-left" class="touch-button text-xl">&#9664;</button>
+            <button id="touch-jump" class="touch-button text-2xl">&#9650;</button>
+            <button id="touch-right" class="touch-button text-xl">&#9654;</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const wrapper = document.getElementById('canvas-wrapper');
+
+            const gameOverScreen = document.getElementById('gameOverScreen');
+            const finalScoreElement = document.getElementById('finalScore');
+            const highScoreElement = document.getElementById('highScore');
+            const newHighScoreText = document.getElementById('newHighScoreText');
+            const restartButton = document.getElementById('restartButton');
+            const startScreen = document.getElementById('startScreen');
+            const startButton = document.getElementById('startButton');
+            const startTitle = document.getElementById('startTitle');
+            const startSubtitle = document.getElementById('startSubtitle');
+            const touchControls = document.getElementById('touch-controls');
+
+            let canvasWidth, canvasHeight;
+
+            // Game state
+            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore;
+            const PIXEL_SCALE = 4;
+
+            // Player properties
+            const playerWidth = 20;
+            const playerHeight = 32;
+            let playerSprite = new Image();
+            playerSprite.src = createPlayerSprite();
+
+            // Input state
+            const keys = {
+                right: false,
+                left: false,
+            };
+
+            function createPlayerSprite() {
+                const spriteCanvas = document.createElement('canvas');
+                spriteCanvas.width = playerWidth;
+                spriteCanvas.height = playerHeight;
+                const sCtx = spriteCanvas.getContext('2d');
+                sCtx.imageSmoothingEnabled = false;
+                sCtx.fillStyle = '#FFDDC1'; // Skin tone
+                sCtx.fillRect(6, 0, 8, 8); // Head
+                sCtx.fillStyle = '#4A90E2'; // Shirt
+                sCtx.fillRect(2, 9, 16, 12);
+                sCtx.fillStyle = '#333333'; // Pants
+                sCtx.fillRect(6, 21, 8, 11);
+                return spriteCanvas.toDataURL();
+            }
+
+            function resizeCanvas() {
+                canvas.width = wrapper.clientWidth;
+                canvas.height = wrapper.clientHeight;
+                canvasWidth = canvas.width;
+                canvasHeight = canvas.height;
+                ctx.imageSmoothingEnabled = false;
+            }
+
+            function init() {
+                resizeCanvas();
+                highScore = localStorage.getItem('beerJumperHighScore') || 0;
+                player = {
+                    x: canvasWidth / 2 - playerWidth / 2,
+                    y: canvasHeight / 3,
+                    width: playerWidth,
+                    height: playerHeight,
+                    dx: 0,
+                    dy: 0,
+                    jumpPower: 4.2, 
+                    speed: 4,
+                    maxFallSpeed: 1.0, 
+                    friction: 0.95, 
+                    acceleration: 0.3,
+                    hitboxPadding: 4 
+                };
+                bubbles = [];
+                score = 0;
+                gravity = 0.07; 
+                gameSpeed = 0; 
+                gameOver = false;
+                startTime = Date.now(); 
+                gameOverScreen.classList.add('hidden');
+                newHighScoreText.classList.add('hidden');
+                gameOverScreen.classList.remove('flex');
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                }
+                gameLoop();
+            }
+
+            function movePlayer() {
+                if (keys.right) player.dx += player.acceleration;
+                else if (keys.left) player.dx -= player.acceleration;
+                else player.dx *= player.friction;
+                
+                if (player.dx > player.speed) player.dx = player.speed;
+                if (player.dx < -player.speed) player.dx = -player.speed;
+
+                player.dy += gravity;
+                if (player.dy > player.maxFallSpeed) player.dy = player.maxFallSpeed;
+
+                player.x += player.dx;
+                player.y += player.dy;
+
+                if (player.x < 0) { player.x = 0; player.dx = 0; }
+                if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
+                if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
+                if (player.y < canvasHeight * 0.15) { player.y = canvasHeight * 0.15; player.dy = 0; }
+            }
+
+            function handleBubbles() {
+                if (gameSpeed < 2) gameSpeed += 0.001;
+                if (Math.random() < 0.03 + gameSpeed * 0.08) {
+                    bubbles.push({
+                        x: Math.random() * (canvasWidth - 20) + 10,
+                        y: canvasHeight + 20,
+                        radius: (Math.floor(Math.random() * 4) + 1) * PIXEL_SCALE, 
+                        speed: Math.random() * 2 + 1 + gameSpeed
+                    });
+                }
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    const b = bubbles[i];
+                    b.y -= b.speed;
+                    drawPixelBubble(b);
+                    const playerHitbox = {
+                        x: player.x + player.hitboxPadding,
+                        y: player.y + player.hitboxPadding,
+                        width: player.width - player.hitboxPadding * 2,
+                        height: player.height - player.hitboxPadding * 2
+                    };
+                    const closestX = Math.max(playerHitbox.x, Math.min(b.x, playerHitbox.x + playerHitbox.width));
+                    const closestY = Math.max(playerHitbox.y, Math.min(b.y, playerHitbox.y + playerHitbox.height));
+                    const distanceX = b.x - closestX;
+                    const distanceY = b.y - closestY;
+                    const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+                    if (distanceSquared < (b.radius * b.radius)) {
+                        setGameOver();
+                    }
+                    if (b.y + b.radius < canvasHeight * 0.15) {
+                        bubbles.splice(i, 1);
+                    }
+                }
+            }
+
+            function drawPixelBackground() {
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                const beerColor1 = '#FBBF24';
+                const beerColor2 = '#F59E0B';
+                const foamColor1 = '#FFFFFF';
+                const foamColor2 = '#fde68a';
+                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
+                for (let y = foamLine; y < canvasHeight; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
+                        ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                    }
+                }
+                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        ctx.fillStyle = (Math.random() > 0.3) ? foamColor1 : foamColor2;
+                        ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                    }
+                }
+            }
+
+            function drawPixelBubble(bubble) {
+                const x = Math.floor(bubble.x / PIXEL_SCALE) * PIXEL_SCALE;
+                const y = Math.floor(bubble.y / PIXEL_SCALE) * PIXEL_SCALE;
+                const r = bubble.radius / PIXEL_SCALE;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                for (let i = -r; i <= r; i++) {
+                    for (let j = -r; j <= r; j++) {
+                        if (i*i + j*j <= r*r) {
+                             ctx.fillRect(x + i * PIXEL_SCALE, y + j * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
+                if (r > 1) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                    const highlightX = x - Math.floor(r/2) * PIXEL_SCALE;
+                    const highlightY = y - Math.floor(r/2) * PIXEL_SCALE;
+                    ctx.fillRect(highlightX, highlightY, PIXEL_SCALE, PIXEL_SCALE);
+                }
+            }
+
+            function drawPlayer() {
+                ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
+            }
+
+            function drawScore() {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.font = '16px "Press Start 2P"';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Time: ${score}s`, 20, 40);
+            }
+
+            function setGameOver() {
+                gameOver = true;
+                cancelAnimationFrame(animationFrameId);
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('beerJumperHighScore', highScore);
+                    newHighScoreText.classList.remove('hidden');
+                }
+                finalScoreElement.textContent = `${score} seconds`;
+                highScoreElement.textContent = `${highScore} seconds`;
+                gameOverScreen.classList.remove('hidden');
+                gameOverScreen.classList.add('flex');
+            }
+            
+            function gameLoop() {
+                if (gameOver) return;
+                drawPixelBackground();
+                movePlayer();
+                drawPlayer();
+                handleBubbles();
+                score = Math.floor((Date.now() - startTime) / 1000);
+                drawScore();
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+
+            // --- Event Handlers ---
+            function handleKeyDown(e) {
+                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    if (!e.repeat && !gameOver) player.dy = -player.jumpPower;
+                }
+            }
+            function handleKeyUp(e) {
+                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+            }
+            
+            function handleTap(event) {
+                event.preventDefault();
+                if (!gameOver) player.dy = -player.jumpPower;
+            }
+
+            function startGame() {
+                startScreen.classList.add('hidden');
+                init();
+            }
+
+            // --- Initial Setup ---
+            function setup() {
+                const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                if (isTouchDevice) {
+                    startTitle.textContent = "Buttons to Move";
+                    startSubtitle.textContent = "Tap to Jump";
+                    touchControls.classList.remove('hidden');
+                    canvas.addEventListener('touchstart', handleTap);
+                } else {
+                    startTitle.textContent = "WASD/Arrows to Move";
+                    startSubtitle.textContent = "Space to Jump";
+                    touchControls.classList.add('hidden');
+                }
+                startButton.addEventListener('click', startGame);
+                restartButton.addEventListener('click', init);
+                window.addEventListener('keydown', handleKeyDown);
+                window.addEventListener('keyup', handleKeyUp);
+                window.addEventListener('resize', resizeCanvas);
+                
+                // Touch button listeners
+                touchControls.querySelector('#touch-left').addEventListener('touchstart', e => { e.preventDefault(); keys.left = true; });
+                touchControls.querySelector('#touch-left').addEventListener('touchend', e => { e.preventDefault(); keys.left = false; });
+                touchControls.querySelector('#touch-right').addEventListener('touchstart', e => { e.preventDefault(); keys.right = true; });
+                touchControls.querySelector('#touch-right').addEventListener('touchend', e => { e.preventDefault(); keys.right = false; });
+                touchControls.querySelector('#touch-jump').addEventListener('touchstart', handleTap);
+            }
+
+            setup();
+        });
+    </script>
+</body>
+</html>
