@@ -77,7 +77,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.1.0</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.1.1</div>
         </div>
         <!-- Touch Controls for Mobile -->
         <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
@@ -107,7 +107,7 @@
             let canvasWidth, canvasHeight;
 
             // Game state
-            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamParticles;
+            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore;
             const PIXEL_SCALE = 4;
             
             // OPTIMIZATION: Canvases for pre-rendering
@@ -171,10 +171,10 @@
                         bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
                     }
                 }
-                // Draw static foam base
+                // Draw static foam base - removed Math.random() for performance
                 for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
                     for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        bgCtx.fillStyle = (Math.random() > 0.1) ? foamColor1 : foamColor2;
+                        bgCtx.fillStyle = ((x / PIXEL_SCALE) % 5 === 0 || (y / PIXEL_SCALE) % 5 === 0) ? foamColor2 : foamColor1;
                         bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
                     }
                 }
@@ -211,24 +211,9 @@
                     bubbleSprites[radius] = bubbleCanvas;
                 }
             }
-            
-            // NEW: Create animated foam particles
-            function createFoamParticles() {
-                foamParticles = [];
-                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
-                for (let i = 0; i < 50; i++) {
-                    foamParticles.push({
-                        x: Math.random() * canvasWidth,
-                        y: Math.random() * foamLine,
-                        lifetime: Math.random() * 20,
-                        maxLifetime: Math.random() * 20 + 10
-                    });
-                }
-            }
 
             function init() {
                 resizeCanvas();
-                createFoamParticles();
                 highScore = localStorage.getItem('beerJumperHighScore') || 0;
                 player = {
                     x: canvasWidth / 2 - playerWidth / 2,
@@ -239,14 +224,14 @@
                     dy: 0,
                     jumpPower: 4.2, 
                     speed: 4,
-                    maxFallSpeed: 1.0, 
+                    maxFallSpeed: 1.2, // Slightly increased fall speed
                     friction: 0.95, 
                     acceleration: 0.3,
                     hitboxPadding: 4 
                 };
                 bubbles = [];
                 score = 0;
-                gravity = 0.07; 
+                gravity = 0.08; // Slightly increased gravity
                 gameSpeed = 0; 
                 gameOver = false;
                 startTime = Date.now(); 
@@ -316,22 +301,6 @@
                 }
             }
 
-            // NEW: Update and draw foam particles
-            function handleFoam() {
-                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
-                foamParticles.forEach(p => {
-                    p.lifetime--;
-                    if (p.lifetime <= 0) {
-                        p.x = Math.random() * canvasWidth;
-                        p.y = Math.random() * foamLine;
-                        p.lifetime = p.maxLifetime;
-                    }
-                    // Draw the particle
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                    ctx.fillRect(Math.floor(p.x / PIXEL_SCALE) * PIXEL_SCALE, Math.floor(p.y / PIXEL_SCALE) * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                });
-            }
-
             function drawPlayer() {
                 ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
             }
@@ -361,7 +330,6 @@
                 if (gameOver) return;
                 
                 ctx.drawImage(backgroundCanvas, 0, 0);
-                handleFoam(); // Draw animated particles over the static foam
 
                 movePlayer();
                 drawPlayer();
