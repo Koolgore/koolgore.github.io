@@ -76,6 +76,8 @@
                     Start Game
                 </button>
             </div>
+            <!-- Version Number -->
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.1.0</div>
         </div>
         <!-- Touch Controls for Mobile -->
         <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
@@ -105,11 +107,11 @@
             let canvasWidth, canvasHeight;
 
             // Game state
-            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore;
+            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamParticles;
             const PIXEL_SCALE = 4;
             
             // OPTIMIZATION: Canvases for pre-rendering
-            let beerCanvas = null;
+            let backgroundCanvas = null;
             let bubbleSprites = {}; // To store pre-rendered bubble images
 
             // Player properties
@@ -145,24 +147,34 @@
                 canvasWidth = canvas.width;
                 canvasHeight = canvas.height;
                 ctx.imageSmoothingEnabled = false;
-                createBeerCanvas(); // Re-create the static beer canvas on resize
+                createBackgroundCanvas(); // Re-create the static background on resize
             }
             
-            // OPTIMIZATION: Pre-render static beer background
-            function createBeerCanvas() {
-                beerCanvas = document.createElement('canvas');
-                beerCanvas.width = canvasWidth;
-                beerCanvas.height = canvasHeight;
-                const bgCtx = beerCanvas.getContext('2d');
+            // OPTIMIZATION: Pre-render static background (beer + foam base)
+            function createBackgroundCanvas() {
+                backgroundCanvas = document.createElement('canvas');
+                backgroundCanvas.width = canvasWidth;
+                backgroundCanvas.height = canvasHeight;
+                const bgCtx = backgroundCanvas.getContext('2d');
                 bgCtx.imageSmoothingEnabled = false;
 
                 const beerColor1 = '#FBBF24';
                 const beerColor2 = '#F59E0B';
+                const foamColor1 = '#FFFFFF';
+                const foamColor2 = '#fde68a';
                 const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
 
+                // Draw static beer
                 for (let y = foamLine; y < canvasHeight; y += PIXEL_SCALE) {
                     for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
                         bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
+                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                    }
+                }
+                // Draw static foam base
+                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        bgCtx.fillStyle = (Math.random() > 0.1) ? foamColor1 : foamColor2;
                         bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
                     }
                 }
@@ -199,9 +211,24 @@
                     bubbleSprites[radius] = bubbleCanvas;
                 }
             }
+            
+            // NEW: Create animated foam particles
+            function createFoamParticles() {
+                foamParticles = [];
+                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
+                for (let i = 0; i < 50; i++) {
+                    foamParticles.push({
+                        x: Math.random() * canvasWidth,
+                        y: Math.random() * foamLine,
+                        lifetime: Math.random() * 20,
+                        maxLifetime: Math.random() * 20 + 10
+                    });
+                }
+            }
 
             function init() {
                 resizeCanvas();
+                createFoamParticles();
                 highScore = localStorage.getItem('beerJumperHighScore') || 0;
                 player = {
                     x: canvasWidth / 2 - playerWidth / 2,
@@ -265,13 +292,10 @@
                 for (let i = bubbles.length - 1; i >= 0; i--) {
                     const b = bubbles[i];
                     b.y -= b.speed;
-                    
-                    // OPTIMIZATION: Draw pre-rendered bubble sprite
                     const sprite = bubbleSprites[b.radius];
                     if (sprite) {
                         ctx.drawImage(sprite, b.x - sprite.width / 2, b.y - sprite.height / 2);
                     }
-                    
                     const playerHitbox = {
                         x: player.x + player.hitboxPadding,
                         y: player.y + player.hitboxPadding,
@@ -292,18 +316,20 @@
                 }
             }
 
-            // Draw animated foam dynamically
-            function drawFoam() {
-                const foamColor1 = '#FFFFFF';
-                const foamColor2 = '#fde68a';
+            // NEW: Update and draw foam particles
+            function handleFoam() {
                 const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
-
-                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        ctx.fillStyle = (Math.random() > 0.3) ? foamColor1 : foamColor2;
-                        ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                foamParticles.forEach(p => {
+                    p.lifetime--;
+                    if (p.lifetime <= 0) {
+                        p.x = Math.random() * canvasWidth;
+                        p.y = Math.random() * foamLine;
+                        p.lifetime = p.maxLifetime;
                     }
-                }
+                    // Draw the particle
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillRect(Math.floor(p.x / PIXEL_SCALE) * PIXEL_SCALE, Math.floor(p.y / PIXEL_SCALE) * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                });
             }
 
             function drawPlayer() {
@@ -334,9 +360,8 @@
             function gameLoop() {
                 if (gameOver) return;
                 
-                // OPTIMIZATION: Draw pre-rendered beer, then dynamic foam
-                ctx.drawImage(beerCanvas, 0, 0);
-                drawFoam();
+                ctx.drawImage(backgroundCanvas, 0, 0);
+                handleFoam(); // Draw animated particles over the static foam
 
                 movePlayer();
                 drawPlayer();
