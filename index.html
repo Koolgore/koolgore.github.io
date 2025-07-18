@@ -61,7 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.2</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.4</div>
         </div>
     </div>
 
@@ -84,14 +84,13 @@
             // --- Game Tuning Variables ---
             const GAME_SETTINGS = {
                 gravity: 0.1,
-                jumpPower: 4.5,
+                jumpPower: 5.0,
                 maxFallSpeed: 1.5,
                 playerSpeed: 3,
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
-                diveAcceleration: 0.5,
-                maxDiveSpeed: 3.0,
-                tiltSensitivity: 0.25,
+                divePower: 5.0,
+                tiltSensitivity: 0.1,
                 gameSpeedRamp: 0.005, 
                 initialBubbleSpeed: 1.0, 
                 bubbleSpeedVariance: 0.5,
@@ -127,6 +126,12 @@
                 down: false,
             };
             
+            // Touch & Motion state
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let neutralBeta = null;
+            let neutralGamma = null;
+
             function createPlayerSpriteFromMap(map) {
                 const spriteCanvas = document.createElement('canvas');
                 spriteCanvas.width = playerWidth;
@@ -210,6 +215,8 @@
                 startTime = Date.now(); 
                 foamXOffset = 0;
                 foamYOffset = 0;
+                neutralBeta = null;
+                neutralGamma = null;
                 gameOverScreen.classList.add('hidden');
                 newHighScoreText.classList.add('hidden');
                 gameOverScreen.classList.remove('flex');
@@ -252,6 +259,7 @@
             }
 
             function movePlayer() {
+                // Horizontal keyboard/tilt movement
                 if (!motionControlsEnabled) {
                     if (keys.right) player.dx += player.acceleration;
                     else if (keys.left) player.dx -= player.acceleration;
@@ -261,13 +269,14 @@
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
                 
-                player.dy += GAME_SETTINGS.gravity;
-                if (keys.down) {
-                    player.dy += GAME_SETTINGS.diveAcceleration;
-                }
-                const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
-                if (player.dy > currentMaxFallSpeed) {
-                    player.dy = currentMaxFallSpeed;
+                // Vertical movement
+                if (!motionControlsEnabled) {
+                    player.dy += GAME_SETTINGS.gravity;
+                    if (keys.down) {
+                        player.dy += GAME_SETTINGS.diveAcceleration;
+                    }
+                    const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
+                    if (player.dy > currentMaxFallSpeed) player.dy = currentMaxFallSpeed;
                 }
 
                 player.isBoosting = (player.dy < 0 || keys.down);
@@ -275,6 +284,7 @@
                 player.x += player.dx;
                 player.y += player.dy;
 
+                // Boundary checks
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
                 if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
                 if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
@@ -438,16 +448,45 @@
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
             }
             
-            function handleTap(e) {
+            function handleTouchStart(e) {
                 e.preventDefault();
-                if (!gameOver) {
-                    player.dy = -player.jumpPower;
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }
+
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                const touchEndX = e.changedTouches[0].screenX;
+                const touchEndY = e.changedTouches[0].screenY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+                const swipeThreshold = 30;
+
+                if (deltaY > swipeThreshold && Math.abs(deltaX) < 50) { // Swipe Down
+                    if (!gameOver) {
+                        player.dy = GAME_SETTINGS.divePower;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
+                    }
+                } else if (deltaY < -swipeThreshold || (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15)) { // Swipe Up or Tap
+                    if (!gameOver) {
+                        player.dy = -player.jumpPower;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
+                    }
                 }
             }
             
             function handleOrientation(event) {
-                const tiltLR = event.gamma; // Left-to-right tilt
+                if (neutralBeta === null) { neutralBeta = event.beta; }
+                if (neutralGamma === null) { neutralGamma = event.gamma; }
+                
+                const tiltLR = event.gamma - neutralGamma;
+                const tiltFB = event.beta - neutralBeta;
+                
                 player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
+                // Apply a gentle continuous force for vertical tilt, which doesn't override jumps/dives
+                player.dy += tiltFB * GAME_SETTINGS.tiltSensitivity * 0.1;
             }
 
             function startGame() {
@@ -477,13 +516,14 @@
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 motionControlsEnabled = false;
                 if (isTouchDevice) {
-                    startTitle.textContent = "Tilt to Move";
-                    startSubtitle.innerHTML = "Tap to Jump";
+                    startTitle.textContent = "Hold Device Comfortably";
+                    startSubtitle.innerHTML = "Tilt to Move<br>Tap/Swipe to Boost";
                     startButton.addEventListener('touchstart', (e) => {
                         e.preventDefault();
                         startGame();
                     });
-                    canvas.addEventListener('touchstart', handleTap);
+                    canvas.addEventListener('touchstart', handleTouchStart);
+                    canvas.addEventListener('touchend', handleTouchEnd);
                 } else {
                     startTitle.textContent = "WASD/Arrows to Move";
                     startSubtitle.textContent = "Space to Jump";
