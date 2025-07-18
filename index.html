@@ -40,7 +40,6 @@
         <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
             <canvas id="gameCanvas"></canvas>
             
-            <!-- Game Over Screen -->
             <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
                 <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
                 <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
@@ -52,16 +51,14 @@
                  <p class="text-sm text-gray-400 mt-4">(or press Space)</p>
             </div>
 
-            <!-- Start Screen -->
             <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
                 <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
-                <h3 id="startSubtitle" class="text-2xl text-white mb-8"></h3>
+                <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
                 <button id="startButton" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-xl animate-pulse">
                     Start Game
                 </button>
             </div>
-            <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.8</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.9</div>
         </div>
     </div>
 
@@ -89,8 +86,9 @@
                 playerSpeed: 3,
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
-                divePower: 5.0,
-                tiltSensitivity: 0.25, // Increased sensitivity
+                diveAcceleration: 0.3,   // Added: extra downward force when diving
+                maxDiveSpeed: 5.0,       // Added: faster max fall speed when diving
+                tiltSensitivity: 0.25,
                 gameSpeedRamp: 0.005, 
                 initialBubbleSpeed: 1.0, 
                 bubbleSpeedVariance: 0.5,
@@ -200,6 +198,7 @@
                     dx: 0,
                     dy: 0,
                     isBoosting: false,
+                    isDiving: false, // Added: state for diving
                     jumpPower: GAME_SETTINGS.jumpPower,
                     speed: GAME_SETTINGS.playerSpeed,
                     maxFallSpeed: GAME_SETTINGS.maxFallSpeed,
@@ -257,42 +256,53 @@
             }
 
             function movePlayer() {
-                // Horizontal movement (keyboard or tilt)
+                // --- Horizontal Movement ---
                 if (!motionControlsEnabled) {
+                    // Keyboard controls
                     if (keys.right) player.dx += player.acceleration;
                     else if (keys.left) player.dx -= player.acceleration;
-                    else player.dx *= player.friction;
+                    else player.dx *= player.friction; // Apply friction only if no keys are pressed
                 }
-                
+                // For motion controls, player.dx is set directly in handleOrientation.
+
+                // Clamp horizontal speed
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
-                
-                // Vertical movement (keyboard or tilt)
-                if (!motionControlsEnabled) {
-                    player.dy += GAME_SETTINGS.gravity;
-                    if (keys.down) {
-                        player.dy += GAME_SETTINGS.diveAcceleration;
-                    }
-                    const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
-                    if (player.dy > currentMaxFallSpeed) {
-                        player.dy = currentMaxFallSpeed;
-                    }
+
+                // --- Universal Vertical Movement Physics ---
+                player.dy += GAME_SETTINGS.gravity;
+
+                // Apply dive acceleration if diving
+                if (player.isDiving) {
+                    player.dy += GAME_SETTINGS.diveAcceleration;
                 }
 
-                player.isBoosting = (player.dy < 0 || keys.down);
+                // Determine and apply max fall speed
+                const currentMaxFallSpeed = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
+                if (player.dy > currentMaxFallSpeed) {
+                    player.dy = currentMaxFallSpeed;
+                }
+                
+                // Update sprite based on action
+                player.isBoosting = (player.dy < 0 || player.isDiving);
 
+                // Apply final velocities to position
                 player.x += player.dx;
                 player.y += player.dy;
 
-                // Boundary checks
+                // --- Boundary and Collision Checks ---
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
                 if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
                 if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
-                
+
+                // Check collision with foam top
                 const foamTopAtPlayer = getFoamTop(player.x + player.width / 2);
                 if (player.y < foamTopAtPlayer) {
                     player.y = foamTopAtPlayer;
                     player.dy = 0;
+                    if (player.isDiving) {
+                        player.isDiving = false; // Stop diving when you hit the top
+                    }
                 }
             }
 
@@ -435,17 +445,24 @@
                 }
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    keys.down = true;
+                    if (!gameOver) player.isDiving = true;
+                }
                 if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
                     if (!e.repeat && !gameOver) {
                         player.dy = -player.jumpPower;
+                        player.isDiving = false; // Jump cancels dive
                     }
                 }
             }
             function handleKeyUp(e) {
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    keys.down = false;
+                    player.isDiving = false; // Stop diving on key release
+                }
             }
             
             function handleTouchStart(e) {
@@ -456,41 +473,37 @@
 
             function handleTouchEnd(e) {
                 e.preventDefault();
+                if (gameOver) return;
+                
                 const touchEndX = e.changedTouches[0].screenX;
                 const touchEndY = e.changedTouches[0].screenY;
                 const deltaX = touchEndX - touchStartX;
                 const deltaY = touchEndY - touchStartY;
 
-                if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) { // Tap
-                    if (!gameOver) {
-                        player.dy = -player.jumpPower;
-                        player.isBoosting = true;
-                        setTimeout(() => player.isBoosting = false, 200);
-                    }
-                } else if (deltaY < -30 && Math.abs(deltaX) < 50) { // Swipe Up
-                     if (!gameOver) {
-                        player.dy = -player.jumpPower;
-                        player.isBoosting = true;
-                        setTimeout(() => player.isBoosting = false, 200);
-                    }
-                } else if (deltaY > 30 && Math.abs(deltaX) < 50) { // Swipe Down
-                    if (!gameOver) {
-                        player.dy = GAME_SETTINGS.divePower;
-                        player.isBoosting = true;
-                        setTimeout(() => player.isBoosting = false, 200);
-                    }
+                if (deltaY > 40 && Math.abs(deltaX) < 50) { // Swipe Down
+                    player.isDiving = true;
+                } else if (deltaY < -40 && Math.abs(deltaX) < 50) { // Swipe Up
+                    player.dy = -player.jumpPower;
+                    player.isDiving = false;
+                } else if (Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) { // Tap
+                    player.dy = -player.jumpPower;
+                    player.isDiving = false;
                 }
+
+                touchStartX = 0;
+                touchStartY = 0;
             }
             
             function handleOrientation(event) {
-                if (neutralBeta === null) {
+                if (neutralBeta === null && event.beta !== null) {
                     neutralBeta = event.beta; // Calibrate on first event
                 }
                 const tiltLR = event.gamma; // Left-to-right tilt
-                const tiltFB = event.beta - neutralBeta;  // Front-to-back tilt, relative to start
                 
-                player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
-                player.dy = tiltFB * GAME_SETTINGS.tiltSensitivity;
+                // ONLY apply tilt to horizontal movement. Vertical is handled by tap/swipe.
+                if (motionControlsEnabled && player && tiltLR !== null) {
+                     player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
+                }
             }
 
             function startGame() {
@@ -498,8 +511,8 @@
                 
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 if (isTouchDevice) {
-                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                        DeviceMotionEvent.requestPermission()
+                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        DeviceOrientationEvent.requestPermission()
                             .then(permissionState => {
                                 if (permissionState === 'granted') {
                                     window.addEventListener('deviceorientation', handleOrientation);
@@ -507,7 +520,7 @@
                                 }
                             })
                             .catch(console.error);
-                    } else if (window.DeviceMotionEvent) {
+                    } else if ('DeviceOrientationEvent' in window) {
                         window.addEventListener('deviceorientation', handleOrientation);
                         motionControlsEnabled = true;
                     }
@@ -520,13 +533,13 @@
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 motionControlsEnabled = false;
                 if (isTouchDevice) {
-                    startTitle.textContent = "Hold Device Comfortably";
-                    startSubtitle.innerHTML = "Tilt to Move<br>Tap/Swipe to Boost";
+                    startTitle.textContent = "Hold Device Flat";
+                    startSubtitle.innerHTML = "Tilt to Move<br>Tap to Jump<br>Swipe Down to Dive";
                     canvas.addEventListener('touchstart', handleTouchStart);
                     canvas.addEventListener('touchend', handleTouchEnd);
                 } else {
-                    startTitle.textContent = "WASD/Arrows to Move";
-                    startSubtitle.textContent = "Space to Jump";
+                    startTitle.textContent = "Arrows/WASD to Move";
+                    startSubtitle.innerHTML = "Space to Jump<br>S/Down to Dive";
                 }
                 
                 startButton.addEventListener('click', startGame);
