@@ -61,7 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.9</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.1</div>
         </div>
     </div>
 
@@ -89,6 +89,7 @@
                 playerSpeed: 3,
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
+                diveAcceleration: 0.5,
                 maxDiveSpeed: 3.0,
                 tiltSensitivity: 0.25,
                 gameSpeedRamp: 0.005, 
@@ -126,6 +127,10 @@
                 down: false,
             };
             
+            // Touch state
+            let touchStartX = 0;
+            let touchStartY = 0;
+
             function createPlayerSpriteFromMap(map) {
                 const spriteCanvas = document.createElement('canvas');
                 spriteCanvas.width = playerWidth;
@@ -251,7 +256,6 @@
             }
 
             function movePlayer() {
-                // Horizontal movement (keyboard or tilt)
                 if (!motionControlsEnabled) {
                     if (keys.right) player.dx += player.acceleration;
                     else if (keys.left) player.dx -= player.acceleration;
@@ -261,7 +265,6 @@
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
                 
-                // Vertical movement is always controlled by gravity and user input now
                 player.dy += GAME_SETTINGS.gravity;
                 if (keys.down) {
                     player.dy += GAME_SETTINGS.diveAcceleration;
@@ -276,7 +279,6 @@
                 player.x += player.dx;
                 player.y += player.dy;
 
-                // Boundary checks
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
                 if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
                 if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
@@ -440,12 +442,23 @@
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
             }
             
-            function handleTap(e) {
+            function handleTouchStart(e) {
                 e.preventDefault();
-                if (!gameOver) {
-                    player.dy = -player.jumpPower;
-                    player.isBoosting = true;
-                    setTimeout(() => player.isBoosting = false, 200);
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }
+
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                const touchEndX = e.changedTouches[0].screenX;
+                const touchEndY = e.changedTouches[0].screenY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+
+                if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) { // Tap
+                    if (!gameOver) {
+                        player.dy = -player.jumpPower;
+                    }
                 }
             }
             
