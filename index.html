@@ -61,7 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.1</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.2</div>
         </div>
     </div>
 
@@ -127,10 +127,6 @@
                 down: false,
             };
             
-            // Touch state
-            let touchStartX = 0;
-            let touchStartY = 0;
-
             function createPlayerSpriteFromMap(map) {
                 const spriteCanvas = document.createElement('canvas');
                 spriteCanvas.width = playerWidth;
@@ -442,23 +438,10 @@
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
             }
             
-            function handleTouchStart(e) {
+            function handleTap(e) {
                 e.preventDefault();
-                touchStartX = e.changedTouches[0].screenX;
-                touchStartY = e.changedTouches[0].screenY;
-            }
-
-            function handleTouchEnd(e) {
-                e.preventDefault();
-                const touchEndX = e.changedTouches[0].screenX;
-                const touchEndY = e.changedTouches[0].screenY;
-                const deltaX = touchEndX - touchStartX;
-                const deltaY = touchEndY - touchStartY;
-
-                if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) { // Tap
-                    if (!gameOver) {
-                        player.dy = -player.jumpPower;
-                    }
+                if (!gameOver) {
+                    player.dy = -player.jumpPower;
                 }
             }
             
@@ -496,13 +479,17 @@
                 if (isTouchDevice) {
                     startTitle.textContent = "Tilt to Move";
                     startSubtitle.innerHTML = "Tap to Jump";
-                    canvas.addEventListener('click', handleTap);
+                    startButton.addEventListener('touchstart', (e) => {
+                        e.preventDefault();
+                        startGame();
+                    });
+                    canvas.addEventListener('touchstart', handleTap);
                 } else {
                     startTitle.textContent = "WASD/Arrows to Move";
                     startSubtitle.textContent = "Space to Jump";
+                    startButton.addEventListener('click', startGame);
                 }
                 
-                startButton.addEventListener('click', startGame);
                 restartButton.addEventListener('click', init);
                 window.addEventListener('keydown', handleKeyDown);
                 window.addEventListener('keyup', handleKeyUp);
