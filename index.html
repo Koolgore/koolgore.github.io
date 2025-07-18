@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beer Jumper</title>
+    <title>Beer Fly</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
 <body class="bg-gray-900 flex items-center justify-center h-screen">
 
     <div id="game-container" class="w-full h-full">
-        <h1 class="text-2xl md:text-3xl mb-2 text-amber-300">Beer Jumper</h1>
+        <h1 class="text-2xl md:text-3xl mb-2 text-amber-300">Beer Fly</h1>
         <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
             <canvas id="gameCanvas"></canvas>
             
@@ -61,7 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.7</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.8</div>
         </div>
     </div>
 
@@ -90,7 +90,7 @@
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
                 divePower: 5.0,
-                tiltSensitivity: 0.2,
+                tiltSensitivity: 0.25, // Increased sensitivity
                 gameSpeedRamp: 0.005, 
                 initialBubbleSpeed: 1.0, 
                 bubbleSpeedVariance: 0.5,
