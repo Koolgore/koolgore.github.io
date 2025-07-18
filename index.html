@@ -59,31 +59,33 @@
             
             <!-- Game Over Screen -->
             <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
-                <h2 class="text-5xl text-red-500 mb-4">Popped!</h2>
-                <p id="newHighScoreText" class="text-2xl text-yellow-300 mb-2 hidden">New High Score!</p>
-                <p class="text-xl text-white mb-2">You Survived: <span id="finalScore">0</span></p>
-                <p class="text-xl text-white mb-6">High Score: <span id="highScore">0</span></p>
-                <button id="restartButton" class="px-8 py-4 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-xl">
+                <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
+                <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
+                <p class="text-lg text-white mb-2">You Survived: <span id="finalScore">0</span></p>
+                <p class="text-lg text-white mb-6">High Score: <span id="highScore">0</span></p>
+                <button id="restartButton" class="px-8 py-4 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-lg">
                     Try Again
                 </button>
+                 <p class="text-sm text-gray-400 mt-4">(or press Space)</p>
             </div>
 
             <!-- Start Screen -->
             <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
-                <h2 id="startTitle" class="text-3xl text-white mb-4"></h2>
-                <h3 id="startSubtitle" class="text-3xl text-white mb-8"></h3>
-                <button id="startButton" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-2xl animate-pulse">
+                <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
+                <h3 id="startSubtitle" class="text-2xl text-white mb-8"></h3>
+                <button id="startButton" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-xl animate-pulse">
                     Start Game
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.1.1</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.2</div>
         </div>
         <!-- Touch Controls for Mobile -->
         <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
             <button id="touch-left" class="touch-button text-xl">&#9664;</button>
             <button id="touch-jump" class="touch-button text-2xl">&#9650;</button>
             <button id="touch-right" class="touch-button text-xl">&#9654;</button>
+            <button id="touch-dive" class="touch-button text-2xl">&#9660;</button>
         </div>
     </div>
 
@@ -104,41 +106,100 @@
             const startSubtitle = document.getElementById('startSubtitle');
             const touchControls = document.getElementById('touch-controls');
 
+            // --- Game Tuning Variables ---
+            const GAME_SETTINGS = {
+                gravity: 0.1,
+                jumpPower: 4.5,
+                maxFallSpeed: 1.5,
+                playerSpeed: 3,
+                playerAcceleration: 0.3,
+                playerFriction: 0.95,
+                diveAcceleration: 0.5,
+                maxDiveSpeed: 3.0,
+                gameSpeedRamp: 0.005, 
+                initialBubbleSpeed: 1.0, 
+                bubbleSpeedVariance: 0.5,
+                bubbleDensity: 0.01,
+            };
+
             let canvasWidth, canvasHeight;
 
             // Game state
-            let player, bubbles, score, gravity, gameSpeed, gameOver, animationFrameId, startTime, highScore;
+            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamXOffset, foamYOffset;
             const PIXEL_SCALE = 4;
-            
-            // OPTIMIZATION: Canvases for pre-rendering
-            let backgroundCanvas = null;
-            let bubbleSprites = {}; // To store pre-rendered bubble images
+
+            // --- Time-step variables ---
+            let lastTime = 0;
+            let accumulator = 0;
+            const timeStep = 1000 / 60;
+
+            // --- Pre-rendering Canvas ---
+            let beerCanvas = null;
 
             // Player properties
-            const playerWidth = 20;
-            const playerHeight = 32;
-            let playerSprite = new Image();
-            playerSprite.src = createPlayerSprite();
+            const playerWidth = 28; // 7 * PIXEL_SCALE
+            const playerHeight = 28; // 7 * PIXEL_SCALE
+            let playerSpriteDefault = new Image();
+            playerSpriteDefault.src = createPlayerSpriteDefault();
+            let playerSpriteJump = new Image();
+            playerSpriteJump.src = createPlayerSpriteJump();
 
             // Input state
             const keys = {
                 right: false,
                 left: false,
+                down: false,
             };
 
-            function createPlayerSprite() {
+            function createPlayerSpriteFromMap(map) {
                 const spriteCanvas = document.createElement('canvas');
                 spriteCanvas.width = playerWidth;
                 spriteCanvas.height = playerHeight;
                 const sCtx = spriteCanvas.getContext('2d');
                 sCtx.imageSmoothingEnabled = false;
-                sCtx.fillStyle = '#FFDDC1'; // Skin tone
-                sCtx.fillRect(6, 0, 8, 8); // Head
-                sCtx.fillStyle = '#4A90E2'; // Shirt
-                sCtx.fillRect(2, 9, 16, 12);
-                sCtx.fillStyle = '#333333'; // Pants
-                sCtx.fillRect(6, 21, 8, 11);
+
+                const colors = {
+                    'B': '#000000',
+                    'R': '#ff0000',
+                    'W': 'rgba(255, 255, 255, 0.7)'
+                };
+
+                for (let y = 0; y < map.length; y++) {
+                    for (let x = 0; x < map[y].length; x++) {
+                        const char = map[y][x];
+                        if (char !== '_') {
+                            sCtx.fillStyle = colors[char];
+                            sCtx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
                 return spriteCanvas.toDataURL();
+            }
+
+            function createPlayerSpriteDefault() {
+                const map = [
+                    "W_RBR_W",
+                    "WWBBBWW",
+                    "WWWBWWW",
+                    "_WWBWW_",
+                    "__BBB__",
+                    "__B_B__",
+                    "_______"
+                ];
+                return createPlayerSpriteFromMap(map);
+            }
+            
+            function createPlayerSpriteJump() {
+                const map = [
+                    "__RBR__",
+                    "WWBBBWW",
+                    "WWWBWWW",
+                    "WWWBWWW",
+                    "__BBB__",
+                    "__B_B__",
+                    "_______"
+                ];
+                return createPlayerSpriteFromMap(map);
             }
 
             function resizeCanvas() {
@@ -147,68 +208,24 @@
                 canvasWidth = canvas.width;
                 canvasHeight = canvas.height;
                 ctx.imageSmoothingEnabled = false;
-                createBackgroundCanvas(); // Re-create the static background on resize
+                createBeerCanvas(); // Re-render static beer background on resize
             }
-            
-            // OPTIMIZATION: Pre-render static background (beer + foam base)
-            function createBackgroundCanvas() {
-                backgroundCanvas = document.createElement('canvas');
-                backgroundCanvas.width = canvasWidth;
-                backgroundCanvas.height = canvasHeight;
-                const bgCtx = backgroundCanvas.getContext('2d');
+
+            function createBeerCanvas() {
+                beerCanvas = document.createElement('canvas');
+                beerCanvas.width = canvasWidth;
+                beerCanvas.height = canvasHeight;
+                const bgCtx = beerCanvas.getContext('2d');
                 bgCtx.imageSmoothingEnabled = false;
 
                 const beerColor1 = '#FBBF24';
                 const beerColor2 = '#F59E0B';
-                const foamColor1 = '#FFFFFF';
-                const foamColor2 = '#fde68a';
-                const foamLine = Math.floor((canvasHeight * 0.15) / PIXEL_SCALE) * PIXEL_SCALE;
-
-                // Draw static beer
-                for (let y = foamLine; y < canvasHeight; y += PIXEL_SCALE) {
+                
+                for (let y = 0; y < canvasHeight; y += PIXEL_SCALE) {
                     for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
                         bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
                         bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
                     }
-                }
-                // Draw static foam base - removed Math.random() for performance
-                for (let y = 0; y < foamLine; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        bgCtx.fillStyle = ((x / PIXEL_SCALE) % 5 === 0 || (y / PIXEL_SCALE) % 5 === 0) ? foamColor2 : foamColor1;
-                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-            }
-
-            // OPTIMIZATION: Pre-render all possible bubble sprites
-            function createBubbleSprites() {
-                for (let r = 1; r <= 4; r++) {
-                    const radius = r * PIXEL_SCALE;
-                    const bubbleCanvas = document.createElement('canvas');
-                    const diameter = radius * 2 + PIXEL_SCALE * 2;
-                    bubbleCanvas.width = diameter;
-                    bubbleCanvas.height = diameter;
-                    const bCtx = bubbleCanvas.getContext('2d');
-                    bCtx.imageSmoothingEnabled = false;
-
-                    const x = radius + PIXEL_SCALE;
-                    const y = radius + PIXEL_SCALE;
-                    
-                    bCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                    for (let i = -r; i <= r; i++) {
-                        for (let j = -r; j <= r; j++) {
-                            if (i*i + j*j <= r*r) {
-                                bCtx.fillRect(x + i * PIXEL_SCALE, y + j * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                            }
-                        }
-                    }
-                    if (r > 1) {
-                        bCtx.fillStyle = 'rgba(255, 255, 255, 1)';
-                        const highlightX = x - Math.floor(r/2) * PIXEL_SCALE;
-                        const highlightY = y - Math.floor(r/2) * PIXEL_SCALE;
-                        bCtx.fillRect(highlightX, highlightY, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                    bubbleSprites[radius] = bubbleCanvas;
                 }
             }
 
@@ -222,26 +239,61 @@
                     height: playerHeight,
                     dx: 0,
                     dy: 0,
-                    jumpPower: 4.2, 
-                    speed: 4,
-                    maxFallSpeed: 1.2, // Slightly increased fall speed
-                    friction: 0.95, 
-                    acceleration: 0.3,
+                    isJumping: false,
+                    jumpPower: GAME_SETTINGS.jumpPower,
+                    speed: GAME_SETTINGS.playerSpeed,
+                    maxFallSpeed: GAME_SETTINGS.maxFallSpeed,
+                    friction: GAME_SETTINGS.playerFriction, 
+                    acceleration: GAME_SETTINGS.playerAcceleration,
                     hitboxPadding: 4 
                 };
                 bubbles = [];
                 score = 0;
-                gravity = 0.08; // Slightly increased gravity
                 gameSpeed = 0; 
                 gameOver = false;
                 startTime = Date.now(); 
+                foamXOffset = 0; // Initialize foam animation offset
+                foamYOffset = 0;
                 gameOverScreen.classList.add('hidden');
                 newHighScoreText.classList.add('hidden');
                 gameOverScreen.classList.remove('flex');
+
                 if (animationFrameId) {
                     cancelAnimationFrame(animationFrameId);
                 }
-                gameLoop();
+                lastTime = 0;
+                accumulator = 0;
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+            
+            function drawPixelBubble(bubble) {
+                const x = Math.floor(bubble.x / PIXEL_SCALE) * PIXEL_SCALE;
+                const y = Math.floor(bubble.y / PIXEL_SCALE) * PIXEL_SCALE;
+                const r = bubble.radius / PIXEL_SCALE;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                for (let i = -r; i <= r; i++) {
+                    for (let j = -r; j <= r; j++) {
+                        if (i*i + j*j <= r*r) {
+                             ctx.fillRect(x + i * PIXEL_SCALE, y + j * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
+                if (r > 1) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                    const highlightX = x - Math.floor(r/2) * PIXEL_SCALE;
+                    const highlightY = y - Math.floor(r/2) * PIXEL_SCALE;
+                    ctx.fillRect(highlightX, highlightY, PIXEL_SCALE, PIXEL_SCALE);
+                }
+            }
+            
+            // Helper function to get the foam's top Y-coordinate at a given X
+            function getFoamTop(x) {
+                const baseFoamLine = canvasHeight * 0.12; // Raised the wave
+                const foamLumpiness = canvasHeight * 0.025; // Horizontal wave
+                const foamSwell = canvasHeight * 0.01; // Vertical wave
+                const horizontalWave = Math.sin((x + foamXOffset) / (canvasWidth * 0.1)) * foamLumpiness;
+                const verticalWave = Math.sin(foamYOffset / 50) * foamSwell;
+                return baseFoamLine + horizontalWave + verticalWave;
             }
 
             function movePlayer() {
@@ -252,8 +304,17 @@
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
 
-                player.dy += gravity;
-                if (player.dy > player.maxFallSpeed) player.dy = player.maxFallSpeed;
+                player.dy += GAME_SETTINGS.gravity;
+                player.isJumping = player.dy < 0;
+
+                if (keys.down) {
+                    player.dy += GAME_SETTINGS.diveAcceleration;
+                }
+
+                const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
+                if (player.dy > currentMaxFallSpeed) {
+                    player.dy = currentMaxFallSpeed;
+                }
 
                 player.x += player.dx;
                 player.y += player.dy;
@@ -261,26 +322,28 @@
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
                 if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
                 if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
-                if (player.y < canvasHeight * 0.15) { player.y = canvasHeight * 0.15; player.dy = 0; }
+                
+                const foamTopAtPlayer = getFoamTop(player.x + player.width / 2);
+                if (player.y < foamTopAtPlayer) {
+                    player.y = foamTopAtPlayer;
+                    player.dy = 0;
+                }
             }
 
-            function handleBubbles() {
-                if (gameSpeed < 2) gameSpeed += 0.001;
-                if (Math.random() < 0.03 + gameSpeed * 0.08) {
+            function updateBubbles() {
+                if (gameSpeed < 1) gameSpeed += GAME_SETTINGS.gameSpeedRamp;
+                if (Math.random() < GAME_SETTINGS.bubbleDensity + gameSpeed * 0.08) {
                     bubbles.push({
                         x: Math.random() * (canvasWidth - 20) + 10,
                         y: canvasHeight + 20,
                         radius: (Math.floor(Math.random() * 4) + 1) * PIXEL_SCALE, 
-                        speed: Math.random() * 2 + 1 + gameSpeed
+                        speed: (GAME_SETTINGS.initialBubbleSpeed + (Math.random() * GAME_SETTINGS.bubbleSpeedVariance)) * (1 + gameSpeed)
                     });
                 }
                 for (let i = bubbles.length - 1; i >= 0; i--) {
                     const b = bubbles[i];
                     b.y -= b.speed;
-                    const sprite = bubbleSprites[b.radius];
-                    if (sprite) {
-                        ctx.drawImage(sprite, b.x - sprite.width / 2, b.y - sprite.height / 2);
-                    }
+                    
                     const playerHitbox = {
                         x: player.x + player.hitboxPadding,
                         y: player.y + player.hitboxPadding,
@@ -295,26 +358,45 @@
                     if (distanceSquared < (b.radius * b.radius)) {
                         setGameOver();
                     }
-                    if (b.y + b.radius < canvasHeight * 0.15) {
+                    
+                    const foamTopAtBubble = getFoamTop(b.x);
+                    if (b.y - b.radius < foamTopAtBubble) {
                         bubbles.splice(i, 1);
                     }
                 }
             }
 
             function drawPlayer() {
-                ctx.drawImage(playerSprite, player.x, player.y, player.width, player.height);
+                const currentSprite = player.isJumping ? playerSpriteJump : playerSpriteDefault;
+                ctx.drawImage(currentSprite, player.x, player.y, player.width, player.height);
             }
 
             function drawScore() {
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                const scoreText = `Time: ${score}s`;
                 ctx.font = '16px "Press Start 2P"';
-                ctx.textAlign = 'left';
-                ctx.fillText(`Time: ${score}s`, 20, 40);
+                const textMetrics = ctx.measureText(scoreText);
+                const textWidth = textMetrics.width;
+                const textHeight = 16;
+                const padding = 12;
+
+                const boxWidth = Math.ceil((textWidth + padding * 2) / PIXEL_SCALE) * PIXEL_SCALE;
+                const boxHeight = Math.ceil((textHeight + padding) / PIXEL_SCALE) * PIXEL_SCALE;
+                const boxX = Math.floor((canvasWidth - boxWidth) / 2);
+                const boxY = 20;
+
+                // Draw the pixelated rectangle
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+
+                // Draw the text
+                ctx.fillStyle = '#FFFFFF';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(scoreText, canvasWidth / 2, boxY + boxHeight / 2 + 2);
             }
 
             function setGameOver() {
                 gameOver = true;
-                cancelAnimationFrame(animationFrameId);
                 if (score > highScore) {
                     highScore = score;
                     localStorage.setItem('beerJumperHighScore', highScore);
@@ -326,35 +408,89 @@
                 gameOverScreen.classList.add('flex');
             }
             
-            function gameLoop() {
-                if (gameOver) return;
-                
-                ctx.drawImage(backgroundCanvas, 0, 0);
-
+            function update() {
                 movePlayer();
-                drawPlayer();
-                handleBubbles();
+                updateBubbles();
                 score = Math.floor((Date.now() - startTime) / 1000);
+                foamXOffset += 0.5; // Animate the foam wave horizontally
+                foamYOffset += 1; // Animate the foam wave vertically
+            }
+
+            function render() {
+                ctx.drawImage(beerCanvas, 0, 0);
+
+                const foamColor1 = '#FFFFFF';
+                const foamColor2 = '#fde68a';
+                const foamLumpiness = canvasHeight * 0.025;
+                const baseFoamLine = canvasHeight * 0.12; // Raised the wave
+
+                for (let y = 0; y < baseFoamLine + foamLumpiness * 3; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
+                        const foamTop = getFoamTop(x);
+                        if (y < foamTop) {
+                            ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 3 === 0) ? foamColor2 : foamColor1;
+                            ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
+
+                for (const b of bubbles) {
+                    drawPixelBubble(b);
+                }
+                drawPlayer();
                 drawScore();
+            }
+
+            function gameLoop(currentTime) {
+                if (gameOver) {
+                    cancelAnimationFrame(animationFrameId);
+                    return;
+                }
+
+                if (lastTime === 0) {
+                    lastTime = currentTime;
+                }
+                const deltaTime = currentTime - lastTime;
+                lastTime = currentTime;
+                accumulator += deltaTime;
+
+                while (accumulator >= timeStep) {
+                    update();
+                    accumulator -= timeStep;
+                }
+                
+                render();
+                
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
 
-            // --- Event Handlers ---
             function handleKeyDown(e) {
+                if (gameOver && e.code === 'Space') {
+                    init();
+                    return;
+                }
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
                 if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
-                    if (!e.repeat && !gameOver) player.dy = -player.jumpPower;
+                    if (!e.repeat && !gameOver) {
+                        player.dy = -player.jumpPower;
+                        player.isJumping = true;
+                    }
                 }
             }
             function handleKeyUp(e) {
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
             }
             
             function handleTap(event) {
                 event.preventDefault();
-                if (!gameOver) player.dy = -player.jumpPower;
+                if (!gameOver) {
+                    player.dy = -player.jumpPower;
+                    player.isJumping = true;
+                }
             }
 
             function startGame() {
@@ -362,7 +498,6 @@
                 init();
             }
 
-            // --- Initial Setup ---
             function setup() {
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 if (isTouchDevice) {
@@ -376,20 +511,19 @@
                     touchControls.classList.add('hidden');
                 }
                 
-                createBubbleSprites(); // Pre-render bubbles once
-
                 startButton.addEventListener('click', startGame);
                 restartButton.addEventListener('click', init);
                 window.addEventListener('keydown', handleKeyDown);
                 window.addEventListener('keyup', handleKeyUp);
                 window.addEventListener('resize', resizeCanvas);
                 
-                // Touch button listeners
                 touchControls.querySelector('#touch-left').addEventListener('touchstart', e => { e.preventDefault(); keys.left = true; });
                 touchControls.querySelector('#touch-left').addEventListener('touchend', e => { e.preventDefault(); keys.left = false; });
                 touchControls.querySelector('#touch-right').addEventListener('touchstart', e => { e.preventDefault(); keys.right = true; });
                 touchControls.querySelector('#touch-right').addEventListener('touchend', e => { e.preventDefault(); keys.right = false; });
                 touchControls.querySelector('#touch-jump').addEventListener('touchstart', handleTap);
+                touchControls.querySelector('#touch-dive').addEventListener('touchstart', e => { e.preventDefault(); keys.down = true; });
+                touchControls.querySelector('#touch-dive').addEventListener('touchend', e => { e.preventDefault(); keys.down = false; });
             }
 
             setup();
