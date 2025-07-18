@@ -61,7 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.3</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.5</div>
         </div>
     </div>
 
@@ -89,8 +89,8 @@
                 playerSpeed: 3,
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
-                diveAcceleration: 0.5,
-                maxDiveSpeed: 3.0,
+                divePower: 5.0,
+                tiltSensitivity: 0.15,
                 gameSpeedRamp: 0.005, 
                 initialBubbleSpeed: 1.0, 
                 bubbleSpeedVariance: 0.5,
@@ -112,8 +112,8 @@
             let beerCanvas = null;
 
             // Player properties
-            const playerWidth = 28; // 7 * PIXEL_SCALE
-            const playerHeight = 28; // 7 * PIXEL_SCALE
+            const playerWidth = 28;
+            const playerHeight = 28;
             let playerSpriteDefault = new Image();
             playerSpriteDefault.src = createPlayerSpriteDefault();
             let playerSpriteJump = new Image();
@@ -206,7 +206,7 @@
                     height: playerHeight,
                     dx: 0,
                     dy: 0,
-                    isJumping: false,
+                    isBoosting: false, // For jump/dive sprite
                     jumpPower: GAME_SETTINGS.jumpPower,
                     speed: GAME_SETTINGS.playerSpeed,
                     maxFallSpeed: GAME_SETTINGS.maxFallSpeed,
@@ -271,17 +271,16 @@
                 
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
-
-                player.dy += GAME_SETTINGS.gravity;
-                player.isJumping = player.dy < 0;
-
-                if (keys.down) {
-                    player.dy += GAME_SETTINGS.diveAcceleration;
-                }
-
-                const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
-                if (player.dy > currentMaxFallSpeed) {
-                    player.dy = currentMaxFallSpeed;
+                
+                if (!motionControlsEnabled) {
+                    player.dy += GAME_SETTINGS.gravity;
+                    if (keys.down) {
+                        player.dy += GAME_SETTINGS.diveAcceleration;
+                    }
+                    const currentMaxFallSpeed = keys.down ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
+                    if (player.dy > currentMaxFallSpeed) {
+                        player.dy = currentMaxFallSpeed;
+                    }
                 }
 
                 player.x += player.dx;
@@ -335,7 +334,7 @@
             }
 
             function drawPlayer() {
-                const currentSprite = player.isJumping ? playerSpriteJump : playerSpriteDefault;
+                const currentSprite = player.isBoosting ? playerSpriteJump : playerSpriteDefault;
                 ctx.drawImage(currentSprite, player.x, player.y, player.width, player.height);
             }
 
@@ -441,7 +440,8 @@
                 if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
                     if (!e.repeat && !gameOver) {
                         player.dy = -player.jumpPower;
-                        player.isJumping = true;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
                     }
                 }
             }
@@ -464,43 +464,53 @@
                 const deltaX = touchEndX - touchStartX;
                 const deltaY = touchEndY - touchStartY;
 
-                if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
-                    // It's a tap
+                if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) { // Tap
                     if (!gameOver) {
                         player.dy = -player.jumpPower;
-                        player.isJumping = true;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
                     }
-                } else if (deltaY > 30 && Math.abs(deltaX) < 50) {
-                    // It's a downward swipe
+                } else if (deltaY < -30 && Math.abs(deltaX) < 50) { // Swipe Up
+                     if (!gameOver) {
+                        player.dy = -player.jumpPower;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
+                    }
+                } else if (deltaY > 30 && Math.abs(deltaX) < 50) { // Swipe Down
                     if (!gameOver) {
-                        player.dy = GAME_SETTINGS.maxDiveSpeed;
+                        player.dy = GAME_SETTINGS.divePower;
+                        player.isBoosting = true;
+                        setTimeout(() => player.isBoosting = false, 200);
                     }
                 }
             }
             
             function handleOrientation(event) {
-                const tilt = event.gamma; // Left-to-right tilt
-                const sensitivity = 0.2;
-                player.dx = tilt * sensitivity;
+                const tiltLR = event.gamma; // Left-to-right tilt
+                const tiltFB = event.beta;  // Front-to-back tilt
+                
+                player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
+                player.dy = (tiltFB - 45) * GAME_SETTINGS.tiltSensitivity; // Subtract 45 to center it
             }
 
             function startGame() {
                 startScreen.classList.add('hidden');
                 
-                // Request permission for motion events on iOS
-                if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                    DeviceMotionEvent.requestPermission()
-                        .then(permissionState => {
-                            if (permissionState === 'granted') {
-                                window.addEventListener('deviceorientation', handleOrientation);
-                                motionControlsEnabled = true;
-                            }
-                        })
-                        .catch(console.error);
-                } else if (window.DeviceMotionEvent) {
-                    // For Android and other devices
-                    window.addEventListener('deviceorientation', handleOrientation);
-                    motionControlsEnabled = true;
+                const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                if (isTouchDevice) {
+                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        DeviceMotionEvent.requestPermission()
+                            .then(permissionState => {
+                                if (permissionState === 'granted') {
+                                    window.addEventListener('deviceorientation', handleOrientation);
+                                    motionControlsEnabled = true;
+                                }
+                            })
+                            .catch(console.error);
+                    } else if (window.DeviceMotionEvent) {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        motionControlsEnabled = true;
+                    }
                 }
                 
                 init();
@@ -508,9 +518,10 @@
 
             function setup() {
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                motionControlsEnabled = false;
                 if (isTouchDevice) {
                     startTitle.textContent = "Tilt to Move";
-                    startSubtitle.innerHTML = "Tap to Jump<br>Swipe Down to Dive";
+                    startSubtitle.innerHTML = "Tap/Swipe Up to Jump<br>Swipe Down to Dive";
                     canvas.addEventListener('touchstart', handleTouchStart);
                     canvas.addEventListener('touchend', handleTouchEnd);
                 } else {
