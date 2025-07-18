@@ -31,23 +31,6 @@
             width: 100%;
             height: 100vh;
         }
-        .touch-button {
-            background-color: #fb923c; /* orange-400 */
-            color: white;
-            border-radius: 9999px; /* rounded-full */
-            border: 3px solid #f97316; /* orange-500 */
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            user-select: none; /* Prevent text selection */
-            width: 60px; /* Shrunk UI */
-            height: 60px; /* Shrunk UI */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .touch-button:active {
-            background-color: #f97316; /* orange-500 */
-            transform: translateY(2px);
-        }
     </style>
 </head>
 <body class="bg-gray-900 flex items-center justify-center h-screen">
@@ -78,14 +61,7 @@
                 </button>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.2</div>
-        </div>
-        <!-- Touch Controls for Mobile -->
-        <div id="touch-controls" class="flex justify-center items-center gap-2 mt-2">
-            <button id="touch-left" class="touch-button text-xl">&#9664;</button>
-            <button id="touch-jump" class="touch-button text-2xl">&#9650;</button>
-            <button id="touch-right" class="touch-button text-xl">&#9654;</button>
-            <button id="touch-dive" class="touch-button text-2xl">&#9660;</button>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.3</div>
         </div>
     </div>
 
@@ -104,7 +80,6 @@
             const startButton = document.getElementById('startButton');
             const startTitle = document.getElementById('startTitle');
             const startSubtitle = document.getElementById('startSubtitle');
-            const touchControls = document.getElementById('touch-controls');
 
             // --- Game Tuning Variables ---
             const GAME_SETTINGS = {
@@ -125,7 +100,7 @@
             let canvasWidth, canvasHeight;
 
             // Game state
-            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamXOffset, foamYOffset;
+            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamXOffset, foamYOffset, motionControlsEnabled;
             const PIXEL_SCALE = 4;
 
             // --- Time-step variables ---
@@ -150,6 +125,10 @@
                 left: false,
                 down: false,
             };
+            
+            // Touch state
+            let touchStartX = 0;
+            let touchStartY = 0;
 
             function createPlayerSpriteFromMap(map) {
                 const spriteCanvas = document.createElement('canvas');
@@ -178,26 +157,14 @@
 
             function createPlayerSpriteDefault() {
                 const map = [
-                    "W_RBR_W",
-                    "WWBBBWW",
-                    "WWWBWWW",
-                    "_WWBWW_",
-                    "__BBB__",
-                    "__B_B__",
-                    "_______"
+                    "W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______"
                 ];
                 return createPlayerSpriteFromMap(map);
             }
             
             function createPlayerSpriteJump() {
                 const map = [
-                    "__RBR__",
-                    "WWBBBWW",
-                    "WWWBWWW",
-                    "WWWBWWW",
-                    "__BBB__",
-                    "__B_B__",
-                    "_______"
+                    "__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______"
                 ];
                 return createPlayerSpriteFromMap(map);
             }
@@ -208,7 +175,7 @@
                 canvasWidth = canvas.width;
                 canvasHeight = canvas.height;
                 ctx.imageSmoothingEnabled = false;
-                createBeerCanvas(); // Re-render static beer background on resize
+                createBeerCanvas();
             }
 
             function createBeerCanvas() {
@@ -252,7 +219,7 @@
                 gameSpeed = 0; 
                 gameOver = false;
                 startTime = Date.now(); 
-                foamXOffset = 0; // Initialize foam animation offset
+                foamXOffset = 0;
                 foamYOffset = 0;
                 gameOverScreen.classList.add('hidden');
                 newHighScoreText.classList.add('hidden');
@@ -286,20 +253,21 @@
                 }
             }
             
-            // Helper function to get the foam's top Y-coordinate at a given X
             function getFoamTop(x) {
-                const baseFoamLine = canvasHeight * 0.12; // Raised the wave
-                const foamLumpiness = canvasHeight * 0.025; // Horizontal wave
-                const foamSwell = canvasHeight * 0.01; // Vertical wave
+                const baseFoamLine = canvasHeight * 0.12;
+                const foamLumpiness = canvasHeight * 0.025;
+                const foamSwell = canvasHeight * 0.01;
                 const horizontalWave = Math.sin((x + foamXOffset) / (canvasWidth * 0.1)) * foamLumpiness;
                 const verticalWave = Math.sin(foamYOffset / 50) * foamSwell;
                 return baseFoamLine + horizontalWave + verticalWave;
             }
 
             function movePlayer() {
-                if (keys.right) player.dx += player.acceleration;
-                else if (keys.left) player.dx -= player.acceleration;
-                else player.dx *= player.friction;
+                if (!motionControlsEnabled) {
+                    if (keys.right) player.dx += player.acceleration;
+                    else if (keys.left) player.dx -= player.acceleration;
+                    else player.dx *= player.friction;
+                }
                 
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
@@ -384,11 +352,9 @@
                 const boxX = Math.floor((canvasWidth - boxWidth) / 2);
                 const boxY = 20;
 
-                // Draw the pixelated rectangle
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                 ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
 
-                // Draw the text
                 ctx.fillStyle = '#FFFFFF';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -412,8 +378,8 @@
                 movePlayer();
                 updateBubbles();
                 score = Math.floor((Date.now() - startTime) / 1000);
-                foamXOffset += 0.5; // Animate the foam wave horizontally
-                foamYOffset += 1; // Animate the foam wave vertically
+                foamXOffset += 0.5;
+                foamYOffset += 1;
             }
 
             function render() {
@@ -422,7 +388,7 @@
                 const foamColor1 = '#FFFFFF';
                 const foamColor2 = '#fde68a';
                 const foamLumpiness = canvasHeight * 0.025;
-                const baseFoamLine = canvasHeight * 0.12; // Raised the wave
+                const baseFoamLine = canvasHeight * 0.12;
 
                 for (let y = 0; y < baseFoamLine + foamLumpiness * 3; y += PIXEL_SCALE) {
                     for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
@@ -485,30 +451,71 @@
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
             }
             
-            function handleTap(event) {
-                event.preventDefault();
-                if (!gameOver) {
-                    player.dy = -player.jumpPower;
-                    player.isJumping = true;
+            function handleTouchStart(e) {
+                e.preventDefault();
+                touchStartX = e.changedTouches[0].screenX;
+                touchStartY = e.changedTouches[0].screenY;
+            }
+
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                const touchEndX = e.changedTouches[0].screenX;
+                const touchEndY = e.changedTouches[0].screenY;
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+
+                if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
+                    // It's a tap
+                    if (!gameOver) {
+                        player.dy = -player.jumpPower;
+                        player.isJumping = true;
+                    }
+                } else if (deltaY > 30 && Math.abs(deltaX) < 50) {
+                    // It's a downward swipe
+                    if (!gameOver) {
+                        player.dy = GAME_SETTINGS.maxDiveSpeed;
+                    }
                 }
+            }
+            
+            function handleOrientation(event) {
+                const tilt = event.gamma; // Left-to-right tilt
+                const sensitivity = 0.2;
+                player.dx = tilt * sensitivity;
             }
 
             function startGame() {
                 startScreen.classList.add('hidden');
+                
+                // Request permission for motion events on iOS
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission()
+                        .then(permissionState => {
+                            if (permissionState === 'granted') {
+                                window.addEventListener('deviceorientation', handleOrientation);
+                                motionControlsEnabled = true;
+                            }
+                        })
+                        .catch(console.error);
+                } else if (window.DeviceMotionEvent) {
+                    // For Android and other devices
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    motionControlsEnabled = true;
+                }
+                
                 init();
             }
 
             function setup() {
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 if (isTouchDevice) {
-                    startTitle.textContent = "Buttons to Move";
-                    startSubtitle.textContent = "Tap to Jump";
-                    touchControls.classList.remove('hidden');
-                    canvas.addEventListener('touchstart', handleTap);
+                    startTitle.textContent = "Tilt to Move";
+                    startSubtitle.innerHTML = "Tap to Jump<br>Swipe Down to Dive";
+                    canvas.addEventListener('touchstart', handleTouchStart);
+                    canvas.addEventListener('touchend', handleTouchEnd);
                 } else {
                     startTitle.textContent = "WASD/Arrows to Move";
                     startSubtitle.textContent = "Space to Jump";
-                    touchControls.classList.add('hidden');
                 }
                 
                 startButton.addEventListener('click', startGame);
@@ -516,14 +523,6 @@
                 window.addEventListener('keydown', handleKeyDown);
                 window.addEventListener('keyup', handleKeyUp);
                 window.addEventListener('resize', resizeCanvas);
-                
-                touchControls.querySelector('#touch-left').addEventListener('touchstart', e => { e.preventDefault(); keys.left = true; });
-                touchControls.querySelector('#touch-left').addEventListener('touchend', e => { e.preventDefault(); keys.left = false; });
-                touchControls.querySelector('#touch-right').addEventListener('touchstart', e => { e.preventDefault(); keys.right = true; });
-                touchControls.querySelector('#touch-right').addEventListener('touchend', e => { e.preventDefault(); keys.right = false; });
-                touchControls.querySelector('#touch-jump').addEventListener('touchstart', handleTap);
-                touchControls.querySelector('#touch-dive').addEventListener('touchstart', e => { e.preventDefault(); keys.down = true; });
-                touchControls.querySelector('#touch-dive').addEventListener('touchend', e => { e.preventDefault(); keys.down = false; });
             }
 
             setup();
