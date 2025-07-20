@@ -31,6 +31,9 @@
             width: 100%;
             height: 100vh;
         }
+        .pixelated-render {
+            image-rendering: pixelated;
+        }
     </style>
 </head>
 <body class="bg-gray-900 flex items-center justify-center h-screen">
@@ -51,6 +54,20 @@
                  <p class="text-sm text-gray-400 mt-4">(or press Space)</p>
             </div>
 
+            <div id="characterSelectScreen" class="absolute inset-0 bg-black bg-opacity-80 flex-col items-center justify-center text-center p-4 hidden">
+                <h2 class="text-3xl text-white mb-8">Choose Your Fly</h2>
+                <div class="flex gap-x-4 sm:gap-x-8">
+                    <div id="selectBeerFly" class="character-choice p-2 sm:p-4 border-4 border-amber-400 rounded-lg cursor-pointer transform hover:scale-105 transition-transform">
+                        <img id="beerFlyPreview" src="" alt="Beer Fly" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto pixelated-render"/>
+                        <p class="mt-2 text-amber-300 text-sm sm:text-base">Beer Fly</p>
+                    </div>
+                    <div id="selectRedFly" class="character-choice p-2 sm:p-4 border-4 border-gray-600 rounded-lg cursor-pointer transform hover:scale-105 transition-transform">
+                        <img id="redFlyPreview" src="" alt="Red Fly" class="w-20 h-20 sm:w-24 sm:h-24 mx-auto pixelated-render"/>
+                        <p class="mt-2 text-red-500 text-sm sm:text-base">Red Fly</p>
+                    </div>
+                </div>
+            </div>
+
             <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
                 <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
                 <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
@@ -58,7 +75,7 @@
                     Start Game
                 </button>
             </div>
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.5.9</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.6.0</div>
         </div>
     </div>
 
@@ -77,6 +94,13 @@
             const startButton = document.getElementById('startButton');
             const startTitle = document.getElementById('startTitle');
             const startSubtitle = document.getElementById('startSubtitle');
+            
+            // Character Select Elements
+            const characterSelectScreen = document.getElementById('characterSelectScreen');
+            const selectBeerFly = document.getElementById('selectBeerFly');
+            const selectRedFly = document.getElementById('selectRedFly');
+            const beerFlyPreview = document.getElementById('beerFlyPreview');
+            const redFlyPreview = document.getElementById('redFlyPreview');
 
             // --- Game Tuning Variables ---
             const GAME_SETTINGS = {
@@ -86,8 +110,8 @@
                 playerSpeed: 3,
                 playerAcceleration: 0.3,
                 playerFriction: 0.95,
-                diveAcceleration: 0.3,   // Added: extra downward force when diving
-                maxDiveSpeed: 5.0,       // Added: faster max fall speed when diving
+                diveAcceleration: 0.3,
+                maxDiveSpeed: 5.0,
                 tiltSensitivity: 0.25,
                 gameSpeedRamp: 0.005, 
                 initialBubbleSpeed: 1.0, 
@@ -99,6 +123,7 @@
 
             // Game state
             let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamXOffset, foamYOffset, motionControlsEnabled;
+            let selectedCharacter = 'beer';
             const PIXEL_SCALE = 4;
 
             // --- Time-step variables ---
@@ -113,9 +138,13 @@
             const playerWidth = 28;
             const playerHeight = 28;
             let playerSpriteDefault = new Image();
-            playerSpriteDefault.src = createPlayerSpriteDefault();
             let playerSpriteJump = new Image();
-            playerSpriteJump.src = createPlayerSpriteJump();
+
+            // Character Sprite Storage
+            const characterSprites = {
+                beer: { default: new Image(), jump: new Image() },
+                red: { default: new Image(), jump: new Image() }
+            };
 
             // Input state
             const keys = {
@@ -127,21 +156,19 @@
             // Touch & Motion state
             let touchStartX = 0;
             let touchStartY = 0;
-            let neutralBeta = null; // For tilt calibration
+            let neutralBeta = null;
 
-            function createPlayerSpriteFromMap(map) {
+            function createPlayerSpriteFromMap(map, colors) {
                 const spriteCanvas = document.createElement('canvas');
                 spriteCanvas.width = playerWidth;
                 spriteCanvas.height = playerHeight;
                 const sCtx = spriteCanvas.getContext('2d');
                 sCtx.imageSmoothingEnabled = false;
 
-                const colors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-
                 for (let y = 0; y < map.length; y++) {
                     for (let x = 0; x < map[y].length; x++) {
                         const char = map[y][x];
-                        if (char !== '_') {
+                        if (char !== '_' && colors[char]) {
                             sCtx.fillStyle = colors[char];
                             sCtx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
                         }
@@ -150,15 +177,35 @@
                 return spriteCanvas.toDataURL();
             }
 
-            function createPlayerSpriteDefault() {
+            function createBeerFlySpriteDefault() {
                 const map = [ "W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______" ];
-                return createPlayerSpriteFromMap(map);
+                const colors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                return createPlayerSpriteFromMap(map, colors);
             }
             
-            function createPlayerSpriteJump() {
+            function createBeerFlySpriteJump() {
                 const map = [ "__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______" ];
-                return createPlayerSpriteFromMap(map);
+                const colors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                return createPlayerSpriteFromMap(map, colors);
             }
+
+            function createRedFlySpriteDefault() {
+                const map = [ "W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______" ];
+                const colors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' }; // Swapped B and R
+                return createPlayerSpriteFromMap(map, colors);
+            }
+
+            function createRedFlySpriteJump() {
+                const map = [ "__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______" ];
+                const colors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' }; // Swapped B and R
+                return createPlayerSpriteFromMap(map, colors);
+            }
+
+            // Pre-load all character sprites
+            characterSprites.beer.default.src = createBeerFlySpriteDefault();
+            characterSprites.beer.jump.src = createBeerFlySpriteJump();
+            characterSprites.red.default.src = createRedFlySpriteDefault();
+            characterSprites.red.jump.src = createRedFlySpriteJump();
 
             function resizeCanvas() {
                 canvas.width = wrapper.clientWidth;
@@ -188,6 +235,11 @@
             }
 
             function init() {
+                // Set player sprites based on selection
+                const selectedSprites = characterSprites[selectedCharacter];
+                playerSpriteDefault = selectedSprites.default;
+                playerSpriteJump = selectedSprites.jump;
+
                 resizeCanvas();
                 highScore = localStorage.getItem('beerJumperHighScore') || 0;
                 player = {
@@ -198,7 +250,7 @@
                     dx: 0,
                     dy: 0,
                     isBoosting: false,
-                    isDiving: false, // Added: state for diving
+                    isDiving: false,
                     jumpPower: GAME_SETTINGS.jumpPower,
                     speed: GAME_SETTINGS.playerSpeed,
                     maxFallSpeed: GAME_SETTINGS.maxFallSpeed,
@@ -213,7 +265,7 @@
                 startTime = Date.now(); 
                 foamXOffset = 0;
                 foamYOffset = 0;
-                neutralBeta = null; // Reset calibration
+                neutralBeta = null;
                 gameOverScreen.classList.add('hidden');
                 newHighScoreText.classList.add('hidden');
                 gameOverScreen.classList.remove('flex');
@@ -256,52 +308,41 @@
             }
 
             function movePlayer() {
-                // --- Horizontal Movement ---
+                if (!player) return; // Guard clause
                 if (!motionControlsEnabled) {
-                    // Keyboard controls
                     if (keys.right) player.dx += player.acceleration;
                     else if (keys.left) player.dx -= player.acceleration;
-                    else player.dx *= player.friction; // Apply friction only if no keys are pressed
+                    else player.dx *= player.friction;
                 }
-                // For motion controls, player.dx is set directly in handleOrientation.
-
-                // Clamp horizontal speed
+                
                 if (player.dx > player.speed) player.dx = player.speed;
                 if (player.dx < -player.speed) player.dx = -player.speed;
 
-                // --- Universal Vertical Movement Physics ---
                 player.dy += GAME_SETTINGS.gravity;
 
-                // Apply dive acceleration if diving
                 if (player.isDiving) {
                     player.dy += GAME_SETTINGS.diveAcceleration;
                 }
 
-                // Determine and apply max fall speed
                 const currentMaxFallSpeed = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
                 if (player.dy > currentMaxFallSpeed) {
                     player.dy = currentMaxFallSpeed;
                 }
                 
-                // Update sprite based on action
                 player.isBoosting = (player.dy < 0 || player.isDiving);
-
-                // Apply final velocities to position
                 player.x += player.dx;
                 player.y += player.dy;
 
-                // --- Boundary and Collision Checks ---
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
                 if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
                 if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
 
-                // Check collision with foam top
                 const foamTopAtPlayer = getFoamTop(player.x + player.width / 2);
                 if (player.y < foamTopAtPlayer) {
                     player.y = foamTopAtPlayer;
                     player.dy = 0;
                     if (player.isDiving) {
-                        player.isDiving = false; // Stop diving when you hit the top
+                        player.isDiving = false;
                     }
                 }
             }
@@ -320,19 +361,21 @@
                     const b = bubbles[i];
                     b.y -= b.speed;
                     
-                    const playerHitbox = {
-                        x: player.x + player.hitboxPadding,
-                        y: player.y + player.hitboxPadding,
-                        width: player.width - player.hitboxPadding * 2,
-                        height: player.height - player.hitboxPadding * 2
-                    };
-                    const closestX = Math.max(playerHitbox.x, Math.min(b.x, playerHitbox.x + playerHitbox.width));
-                    const closestY = Math.max(playerHitbox.y, Math.min(b.y, playerHitbox.y + playerHitbox.height));
-                    const distanceX = b.x - closestX;
-                    const distanceY = b.y - closestY;
-                    const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
-                    if (distanceSquared < (b.radius * b.radius)) {
-                        setGameOver();
+                    if (player) {
+                        const playerHitbox = {
+                            x: player.x + player.hitboxPadding,
+                            y: player.y + player.hitboxPadding,
+                            width: player.width - player.hitboxPadding * 2,
+                            height: player.height - player.hitboxPadding * 2
+                        };
+                        const closestX = Math.max(playerHitbox.x, Math.min(b.x, playerHitbox.x + playerHitbox.width));
+                        const closestY = Math.max(playerHitbox.y, Math.min(b.y, playerHitbox.y + playerHitbox.height));
+                        const distanceX = b.x - closestX;
+                        const distanceY = b.y - closestY;
+                        const distanceSquared = (distanceX * distanceX) + (distanceY * distanceY);
+                        if (distanceSquared < (b.radius * b.radius)) {
+                            setGameOver();
+                        }
                     }
                     
                     const foamTopAtBubble = getFoamTop(b.x);
@@ -343,6 +386,7 @@
             }
 
             function drawPlayer() {
+                if (!player) return;
                 const currentSprite = player.isBoosting ? playerSpriteJump : playerSpriteDefault;
                 ctx.drawImage(currentSprite, player.x, player.y, player.width, player.height);
             }
@@ -392,22 +436,6 @@
 
             function render() {
                 ctx.drawImage(beerCanvas, 0, 0);
-
-                const foamColor1 = '#FFFFFF';
-                const foamColor2 = '#fde68a';
-                const foamLumpiness = canvasHeight * 0.025;
-                const baseFoamLine = canvasHeight * 0.12;
-
-                for (let y = 0; y < baseFoamLine + foamLumpiness * 3; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        const foamTop = getFoamTop(x);
-                        if (y < foamTop) {
-                            ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 3 === 0) ? foamColor2 : foamColor1;
-                            ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                        }
-                    }
-                }
-
                 for (const b of bubbles) {
                     drawPixelBubble(b);
                 }
@@ -421,9 +449,7 @@
                     return;
                 }
 
-                if (lastTime === 0) {
-                    lastTime = currentTime;
-                }
+                if (lastTime === 0) lastTime = currentTime;
                 const deltaTime = currentTime - lastTime;
                 lastTime = currentTime;
                 accumulator += deltaTime;
@@ -434,34 +460,37 @@
                 }
                 
                 render();
-                
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
 
             function handleKeyDown(e) {
                 if (gameOver && e.code === 'Space') {
-                    init();
+                    startScreen.classList.remove('hidden');
+                    gameOverScreen.classList.add('hidden');
+                    gameOverScreen.classList.remove('flex');
                     return;
                 }
+                if (!player || gameOver) return;
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') {
                     keys.down = true;
-                    if (!gameOver) player.isDiving = true;
+                    player.isDiving = true;
                 }
                 if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
-                    if (!e.repeat && !gameOver) {
+                    if (!e.repeat) {
                         player.dy = -player.jumpPower;
-                        player.isDiving = false; // Jump cancels dive
+                        player.isDiving = false;
                     }
                 }
             }
+
             function handleKeyUp(e) {
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
                 if (e.code === 'ArrowDown' || e.code === 'KeyS') {
                     keys.down = false;
-                    player.isDiving = false; // Stop diving on key release
+                    if (player) player.isDiving = false;
                 }
             }
             
@@ -473,19 +502,19 @@
 
             function handleTouchEnd(e) {
                 e.preventDefault();
-                if (gameOver) return;
+                if (gameOver || !player) return;
                 
                 const touchEndX = e.changedTouches[0].screenX;
                 const touchEndY = e.changedTouches[0].screenY;
                 const deltaX = touchEndX - touchStartX;
                 const deltaY = touchEndY - touchStartY;
 
-                if (deltaY > 40 && Math.abs(deltaX) < 50) { // Swipe Down
+                if (deltaY > 40 && Math.abs(deltaX) < 50) {
                     player.isDiving = true;
-                } else if (deltaY < -40 && Math.abs(deltaX) < 50) { // Swipe Up
+                } else if (deltaY < -40 && Math.abs(deltaX) < 50) {
                     player.dy = -player.jumpPower;
                     player.isDiving = false;
-                } else if (Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) { // Tap
+                } else if (Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) {
                     player.dy = -player.jumpPower;
                     player.isDiving = false;
                 }
@@ -495,19 +524,16 @@
             }
             
             function handleOrientation(event) {
-                if (neutralBeta === null && event.beta !== null) {
-                    neutralBeta = event.beta; // Calibrate on first event
-                }
-                const tiltLR = event.gamma; // Left-to-right tilt
-                
-                // ONLY apply tilt to horizontal movement. Vertical is handled by tap/swipe.
+                if (neutralBeta === null && event.beta !== null) neutralBeta = event.beta;
+                const tiltLR = event.gamma;
                 if (motionControlsEnabled && player && tiltLR !== null) {
                      player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
                 }
             }
 
             function startGame() {
-                startScreen.classList.add('hidden');
+                characterSelectScreen.classList.add('hidden');
+                characterSelectScreen.classList.remove('flex');
                 
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 if (isTouchDevice) {
@@ -525,11 +551,16 @@
                         motionControlsEnabled = true;
                     }
                 }
-                
                 init();
             }
 
             function setup() {
+                resizeCanvas(); // Initial resize to draw background
+                
+                // Populate preview images
+                beerFlyPreview.src = characterSprites.beer.default.src;
+                redFlyPreview.src = characterSprites.red.default.src;
+
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
                 motionControlsEnabled = false;
                 if (isTouchDevice) {
@@ -542,8 +573,30 @@
                     startSubtitle.innerHTML = "Space to Jump<br>S/Down to Dive";
                 }
                 
-                startButton.addEventListener('click', startGame);
-                restartButton.addEventListener('click', init);
+                // Main start button shows character select
+                startButton.addEventListener('click', () => {
+                    startScreen.classList.add('hidden');
+                    characterSelectScreen.classList.remove('hidden');
+                    characterSelectScreen.classList.add('flex');
+                });
+                
+                // Character selection starts the game
+                selectBeerFly.addEventListener('click', () => {
+                    selectedCharacter = 'beer';
+                    startGame();
+                });
+                 selectRedFly.addEventListener('click', () => {
+                    selectedCharacter = 'red';
+                    startGame();
+                });
+
+                restartButton.addEventListener('click', () => {
+                    gameOverScreen.classList.add('hidden');
+                    gameOverScreen.classList.remove('flex');
+                    characterSelectScreen.classList.remove('hidden');
+                    characterSelectScreen.classList.add('flex');
+                });
+
                 window.addEventListener('keydown', handleKeyDown);
                 window.addEventListener('keyup', handleKeyUp);
                 window.addEventListener('resize', resizeCanvas);
