@@ -1,12 +1,3 @@
-You're right, that makes more sense visually. When diving, the fly should look like it's falling, not jumping.
-
-I've adjusted the sprite logic so that the "jump" sprite is now only used when the fly is actively moving upwards. When diving or falling, it will use the default sprite.
-
-This is a logic-only change; here is the complete updated code.
-
------
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,14 +14,14 @@ This is a logic-only change; here is the complete updated code.
             background-color: #1a1a1a;
             color: #ffffff;
             overflow: hidden;
-            touch-action: none; /* Disable touch scrolling on the body */
+            touch-action: none;
         }
         canvas {
             background-color: #000;
             display: block;
             margin: 0 auto;
             cursor: pointer;
-            image-rendering: pixelated; /* Ensures crisp pixels */
+            image-rendering: pixelated;
         }
         #game-container {
             display: flex;
@@ -39,9 +30,6 @@ This is a logic-only change; here is the complete updated code.
             align-items: center;
             width: 100%;
             height: 100vh;
-        }
-        .pixelated-render {
-            image-rendering: pixelated;
         }
     </style>
 </head>
@@ -52,87 +40,86 @@ This is a logic-only change; here is the complete updated code.
         <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
             <canvas id="gameCanvas"></canvas>
             
-            <!-- Game Over Screen -->
-            <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
-                <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
-                <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
-                <p class="text-lg text-white mb-2">You Survived: <span id="finalScore">0</span></p>
-                <p class="text-lg text-white mb-6">High Score: <span id="highScore">0</span></p>
-                <div class="flex flex-col items-center gap-y-4">
-                    <button id="retryButton" class="px-10 py-5 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-xl">
-                        Retry
-                    </button>
-                    <button id="mainMenuButton" class="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
-                        Main Menu
-                    </button>
+            <!-- UI Screens Container -->
+            <div id="ui-container">
+                <!-- Game Over Screen -->
+                <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
+                    <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
+                    <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
+                    <p class="text-lg text-white mb-2">You Survived: <span id="finalScore">0</span></p>
+                    <p class="text-lg text-white mb-6">High Score: <span id="highScore">0</span></p>
+                    <div class="flex flex-col items-center gap-y-4">
+                        <button data-action="retry" class="px-10 py-5 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-xl">
+                            Retry
+                        </button>
+                        <button data-action="main-menu" class="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
+                            Main Menu
+                        </button>
+                    </div>
+                    <p class="text-sm text-gray-400 mt-4">(or press Space to Retry)</p>
                 </div>
-                 <p class="text-sm text-gray-400 mt-4">(or press Space to Retry)</p>
-            </div>
 
-            <!-- Stats Screen -->
-            <div id="statsScreen" class="absolute inset-0 bg-black bg-opacity-90 flex-col items-center justify-center text-center p-4 hidden">
-                <h2 class="text-3xl text-white mb-6">Player Stats</h2>
-                <div class="text-left w-full max-w-xs mx-auto space-y-2 text-lg">
-                    <p class="flex justify-between"><span>Longest Run:</span> <span id="statLongestRun" class="text-yellow-300">0s</span></p>
-                    <p class="flex justify-between"><span>Total Play Time:</span> <span id="statTotalTime" class="text-yellow-300">0m</span></p>
-                    <p class="flex justify-between"><span>Games Played:</span> <span id="statGamesPlayed" class="text-yellow-300">0</span></p>
-                    <p class="flex justify-between"><span>Total Jumps:</span> <span id="statTotalJumps" class="text-yellow-300">0</span></p>
-                    <p class="flex justify-between"><span>Total Dives:</span> <span id="statTotalDives" class="text-yellow-300">0</span></p>
-                    <p class="flex justify-between"><span>Bubbles Dodged:</span> <span id="statBubblesDodged" class="text-yellow-300">0</span></p>
+                <!-- Stats Screen -->
+                <div id="statsScreen" class="absolute inset-0 bg-black bg-opacity-90 flex-col items-center justify-center text-center p-4 hidden">
+                    <h2 class="text-3xl text-white mb-6">Player Stats</h2>
+                    <div class="text-left w-full max-w-xs mx-auto space-y-2 text-lg">
+                        <p class="flex justify-between"><span>Longest Run:</span> <span id="statLongestRun" class="text-yellow-300">0s</span></p>
+                        <p class="flex justify-between"><span>Total Play Time:</span> <span id="statTotalTime" class="text-yellow-300">0m</span></p>
+                        <p class="flex justify-between"><span>Games Played:</span> <span id="statGamesPlayed" class="text-yellow-300">0</span></p>
+                        <p class="flex justify-between"><span>Total Jumps:</span> <span id="statTotalJumps" class="text-yellow-300">0</span></p>
+                        <p class="flex justify-between"><span>Total Dives:</span> <span id="statTotalDives" class="text-yellow-300">0</span></p>
+                        <p class="flex justify-between"><span>Bubbles Dodged:</span> <span id="statBubblesDodged" class="text-yellow-300">0</span></p>
+                    </div>
+                    <div class="mt-8 flex gap-x-4">
+                        <button data-action="main-menu" class="px-8 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors">
+                            Back
+                        </button>
+                        <button data-action="reset-stats" class="px-8 py-3 bg-red-800 text-white rounded-lg hover:bg-red-700 transition-colors">
+                            Reset
+                        </button>
+                    </div>
                 </div>
-                <div class="mt-8 flex gap-x-4">
-                     <button id="backButton" class="px-8 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors">
-                        Back
-                    </button>
-                    <button id="resetStatsButton" class="px-8 py-3 bg-red-800 text-white rounded-lg hover:bg-red-700 transition-colors">
-                        Reset
-                    </button>
-                </div>
-            </div>
 
-            <!-- Start Screen -->
-            <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
-                <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
-                <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
-                <button id="startButton" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-xl animate-pulse">
-                    Start Game
-                </button>
-                 <button id="statsButton" class="mt-6 px-6 py-2 bg-gray-700 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors">
-                    View Stats
-                </button>
+                <!-- Start Screen -->
+                <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
+                    <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
+                    <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
+                    <button data-action="start-game" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-xl animate-pulse">
+                        Start Game
+                    </button>
+                    <button data-action="view-stats" class="mt-6 px-6 py-2 bg-gray-700 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors">
+                        View Stats
+                    </button>
+                </div>
             </div>
             <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.7.5</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.8.0</div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // --- Constants and Game Settings ---
+            const PIXEL_SCALE = 4;
+            const PLAYER_WIDTH = 28;
+            const PLAYER_HEIGHT = 28;
+            const GAME_SETTINGS = {
+                gravity: 0.1, jumpPower: 4.5, maxFallSpeed: 1.5, playerSpeed: 3,
+                playerAcceleration: 0.3, playerFriction: 0.95, diveAcceleration: 0.3,
+                maxDiveSpeed: 5.0, tiltSensitivity: 0.25, gameSpeedRamp: 0.005,
+                initialBubbleSpeed: 1.0, bubbleSpeedVariance: 0.5, bubbleDensity: 0.01,
+            };
+
+            // --- Canvas and DOM Elements ---
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
             const wrapper = document.getElementById('canvas-wrapper');
-
-            // Screen elements
-            const gameOverScreen = document.getElementById('gameOverScreen');
-            const startScreen = document.getElementById('startScreen');
-            const statsScreen = document.getElementById('statsScreen');
-
-            // Button elements
-            const mainMenuButton = document.getElementById('mainMenuButton');
-            const retryButton = document.getElementById('retryButton');
-            const startButton = document.getElementById('startButton');
-            const statsButton = document.getElementById('statsButton');
-            const backButton = document.getElementById('backButton');
-            const resetStatsButton = document.getElementById('resetStatsButton');
-            
-            // UI Text elements
-            const finalScoreElement = document.getElementById('finalScore');
-            const highScoreElement = document.getElementById('highScore');
-            const newHighScoreText = document.getElementById('newHighScoreText');
-            const startTitle = document.getElementById('startTitle');
-            const startSubtitle = document.getElementById('startSubtitle');
-            
-            // Stat value elements
+            const uiContainer = document.getElementById('ui-container');
+            const finalScoreEl = document.getElementById('finalScore');
+            const highScoreEl = document.getElementById('highScore');
+            const newHighScoreTextEl = document.getElementById('newHighScoreText');
+            const startTitleEl = document.getElementById('startTitle');
+            const startSubtitleEl = document.getElementById('startSubtitle');
             const statElements = {
                 longestRun: document.getElementById('statLongestRun'),
                 totalTime: document.getElementById('statTotalTime'),
@@ -142,36 +129,40 @@ This is a logic-only change; here is the complete updated code.
                 bubblesDodged: document.getElementById('statBubblesDodged')
             };
 
-            const GAME_SETTINGS = {
-                gravity: 0.1, jumpPower: 4.5, maxFallSpeed: 1.5, playerSpeed: 3,
-                playerAcceleration: 0.3, playerFriction: 0.95, diveAcceleration: 0.3,
-                maxDiveSpeed: 5.0, tiltSensitivity: 0.25, gameSpeedRamp: 0.005,
-                initialBubbleSpeed: 1.0, bubbleSpeedVariance: 0.5, bubbleDensity: 0.01,
-            };
-
-            let canvasWidth, canvasHeight;
-            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, highScore, foamXOffset, foamYOffset, motionControlsEnabled;
-            let selectedCharacter = 'beer';
-            let stats = {};
-            const PIXEL_SCALE = 4;
-
+            // --- Game State Variables ---
+            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, stats, highScore;
+            let foamXOffset = 0, foamYOffset = 0;
+            let motionControlsEnabled = false, neutralBeta = null;
             let lastTime = 0, accumulator = 0;
             const timeStep = 1000 / 60;
             let beerCanvas = null;
-
-            const playerWidth = 28;
-            const playerHeight = 28;
-            let playerSpriteDefault = new Image();
-            let playerSpriteJump = new Image();
-
             const characterSprites = {
                 beer: { default: new Image(), jump: new Image() },
                 red: { default: new Image(), jump: new Image() }
             };
-
             const keys = { right: false, left: false, down: false };
-            let touchStartX = 0, touchStartY = 0, neutralBeta = null;
+            let touchStartX = 0, touchStartY = 0;
 
+            // --- Sprite Generation ---
+            function createPlayerSprite(map, colors) {
+                const spriteCanvas = document.createElement('canvas');
+                spriteCanvas.width = PLAYER_WIDTH;
+                spriteCanvas.height = PLAYER_HEIGHT;
+                const sCtx = spriteCanvas.getContext('2d');
+                sCtx.imageSmoothingEnabled = false;
+                for (let y = 0; y < map.length; y++) {
+                    for (let x = 0; x < map[y].length; x++) {
+                        const char = map[y][x];
+                        if (char !== '_' && colors[char]) {
+                            sCtx.fillStyle = colors[char];
+                            sCtx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
+                return spriteCanvas.toDataURL();
+            }
+
+            // --- Stats Management ---
             function getDefaultStats() {
                 return { longestRun: 0, totalTime: 0, gamesPlayed: 0, totalJumps: 0, totalDives: 0, bubblesDodged: 0 };
             }
@@ -189,156 +180,149 @@ This is a logic-only change; here is the complete updated code.
             function updateStatsDisplay() {
                 statElements.longestRun.textContent = `${stats.longestRun}s`;
                 const minutes = Math.floor(stats.totalTime / 60);
-                const seconds = stats.totalTime % 60;
-                statElements.totalTime.textContent = `${minutes}m ${seconds}s`;
-                statElements.gamesPlayed.textContent = stats.gamesPlayed;
-                statElements.totalJumps.textContent = stats.totalJumps;
-                statElements.totalDives.textContent = stats.totalDives;
-                statElements.bubblesDodged.textContent = stats.bubblesDodged;
-            }
-
-            function resetStats() {
-                if (confirm("Are you sure you want to reset all your stats? This cannot be undone.")) {
-                    stats = getDefaultStats();
-                    highScore = 0;
-                    saveStats();
-                    updateStatsDisplay();
-                }
-            }
-
-            function createPlayerSpriteFromMap(map, colors) {
-                const spriteCanvas = document.createElement('canvas');
-                spriteCanvas.width = playerWidth;
-                spriteCanvas.height = playerHeight;
-                const sCtx = spriteCanvas.getContext('2d');
-                sCtx.imageSmoothingEnabled = false;
-                for (let y = 0; y < map.length; y++) {
-                    for (let x = 0; x < map[y].length; x++) {
-                        const char = map[y][x];
-                        if (char !== '_' && colors[char]) {
-                            sCtx.fillStyle = colors[char];
-                            sCtx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                        }
+                statElements.totalTime.textContent = `${minutes}m ${stats.totalTime % 60}s`;
+                Object.keys(statElements).forEach(key => {
+                    if(stats[key] !== undefined && key !== 'longestRun' && key !== 'totalTime') {
+                       statElements[key].textContent = stats[key];
                     }
-                }
-                return spriteCanvas.toDataURL();
+                });
             }
 
-            function createBeerFlySpriteDefault() {
-                const map = [ "W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______" ];
-                const colors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                return createPlayerSpriteFromMap(map, colors);
-            }
-            
-            function createBeerFlySpriteJump() {
-                const map = [ "__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______" ];
-                const colors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                return createPlayerSpriteFromMap(map, colors);
-            }
-
-            function createRedFlySpriteDefault() {
-                const map = [ "W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______" ];
-                const colors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                return createPlayerSpriteFromMap(map, colors);
-            }
-
-            function createRedFlySpriteJump() {
-                const map = [ "__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______" ];
-                const colors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                return createPlayerSpriteFromMap(map, colors);
-            }
-
-            characterSprites.beer.default.src = createBeerFlySpriteDefault();
-            characterSprites.beer.jump.src = createBeerFlySpriteJump();
-            characterSprites.red.default.src = createRedFlySpriteDefault();
-            characterSprites.red.jump.src = createRedFlySpriteJump();
-
-            function resizeCanvas() {
-                canvas.width = wrapper.clientWidth;
-                canvas.height = wrapper.clientHeight;
-                canvasWidth = canvas.width;
-                canvasHeight = canvas.height;
-                ctx.imageSmoothingEnabled = false;
-                createBeerCanvas();
-            }
-
-            function createBeerCanvas() {
-                beerCanvas = document.createElement('canvas');
-                beerCanvas.width = canvasWidth;
-                beerCanvas.height = canvasHeight;
-                const bgCtx = beerCanvas.getContext('2d');
-                bgCtx.imageSmoothingEnabled = false;
-                const beerColor1 = '#FBBF24', beerColor2 = '#F59E0B';
-                for (let y = 0; y < canvasHeight; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
-                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-            }
-
+            // --- Game Initialization ---
             function init() {
-                // Randomize character
-                const characterKeys = ['beer', 'red'];
-                selectedCharacter = characterKeys[Math.floor(Math.random() * characterKeys.length)];
-
-                const selectedSprites = characterSprites[selectedCharacter];
-                playerSpriteDefault = selectedSprites.default;
-                playerSpriteJump = selectedSprites.jump;
-                stats.gamesPlayed++;
-                resizeCanvas();
+                // Randomize character and set sprites
+                const characterKeys = Object.keys(characterSprites);
+                const selectedCharacter = characterKeys[Math.floor(Math.random() * characterKeys.length)];
                 player = {
-                    x: canvasWidth / 2 - playerWidth / 2, y: canvasHeight / 3, width: playerWidth, height: playerHeight,
-                    dx: 0, dy: 0, isBoosting: false, isDiving: false, jumpPower: GAME_SETTINGS.jumpPower,
-                    speed: GAME_SETTINGS.playerSpeed, maxFallSpeed: GAME_SETTINGS.maxFallSpeed, friction: GAME_SETTINGS.playerFriction,
-                    acceleration: GAME_SETTINGS.playerAcceleration, hitboxPadding: 4 
+                    ...characterSprites[selectedCharacter],
+                    x: wrapper.clientWidth / 2 - PLAYER_WIDTH / 2, y: wrapper.clientHeight / 3,
+                    width: PLAYER_WIDTH, height: PLAYER_HEIGHT, dx: 0, dy: 0,
+                    isBoosting: false, isDiving: false, hitboxPadding: 4
                 };
-                bubbles = []; score = 0; gameSpeed = 0; gameOver = false;
-                startTime = Date.now(); foamXOffset = 0; foamYOffset = 0; neutralBeta = null;
-                gameOverScreen.classList.add('hidden');
-                newHighScoreText.classList.add('hidden');
-                gameOverScreen.classList.remove('flex');
+
+                stats.gamesPlayed++;
+                bubbles = [];
+                score = 0;
+                gameSpeed = 0;
+                gameOver = false;
+                startTime = Date.now();
+                neutralBeta = null;
+                
                 if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                lastTime = 0; accumulator = 0;
+                lastTime = 0;
+                accumulator = 0;
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
-            
-            function getFoamTop(x) {
-                const base = canvasHeight * 0.12, lump = canvasHeight * 0.025, swell = canvasHeight * 0.01;
-                const hWave = Math.sin((x + foamXOffset) / (canvasWidth * 0.1)) * lump;
-                const vWave = Math.sin(foamYOffset / 50) * swell;
-                return base + hWave + vWave;
-            }
 
-            function setGameOver() {
-                gameOver = true;
-                stats.totalTime += score;
-                if (score > highScore) {
-                    highScore = score;
-                    stats.longestRun = score;
-                    newHighScoreText.classList.remove('hidden');
-                }
-                saveStats();
-                finalScoreElement.textContent = `${score} seconds`;
-                highScoreElement.textContent = `${highScore} seconds`;
-                gameOverScreen.classList.remove('hidden');
-                gameOverScreen.classList.add('flex');
-            }
-            
+            // --- Game Loop: Update and Render ---
             function update() {
-                movePlayer();
-                updateBubbles();
+                // Player movement
+                if (!motionControlsEnabled) {
+                    if (keys.right) player.dx += GAME_SETTINGS.playerAcceleration;
+                    else if (keys.left) player.dx -= GAME_SETTINGS.playerAcceleration;
+                    else player.dx *= GAME_SETTINGS.playerFriction;
+                }
+                player.dx = Math.max(-GAME_SETTINGS.playerSpeed, Math.min(GAME_SETTINGS.playerSpeed, player.dx));
+                player.dy += GAME_SETTINGS.gravity;
+                if (player.isDiving) player.dy += GAME_SETTINGS.diveAcceleration;
+                const maxFall = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : GAME_SETTINGS.maxFallSpeed;
+                player.dy = Math.min(player.dy, maxFall);
+                player.isBoosting = player.dy < 0;
+                player.x += player.dx;
+                player.y += player.dy;
+
+                // Boundary checks
+                player.x = Math.max(0, Math.min(wrapper.clientWidth - player.width, player.x));
+                if (player.x === 0 || player.x === wrapper.clientWidth - player.width) player.dx = 0;
+                player.y = Math.max(0, Math.min(wrapper.clientHeight - player.height, player.y));
+                if (player.y === wrapper.clientHeight - player.height) player.dy = 0;
+                const foamTop = getFoamTop(player.x + player.width / 2);
+                if (player.y < foamTop) {
+                    player.y = foamTop;
+                    player.dy = 0;
+                    player.isDiving = false;
+                }
+
+                // Bubbles
+                if (gameSpeed < 1) gameSpeed += GAME_SETTINGS.gameSpeedRamp;
+                if (Math.random() < GAME_SETTINGS.bubbleDensity + gameSpeed * 0.08) {
+                    bubbles.push({
+                        x: Math.random() * (wrapper.clientWidth - 20) + 10, y: wrapper.clientHeight + 20,
+                        radius: (Math.floor(Math.random() * 4) + 1) * PIXEL_SCALE,
+                        speed: (GAME_SETTINGS.initialBubbleSpeed + Math.random() * GAME_SETTINGS.bubbleSpeedVariance) * (1 + gameSpeed)
+                    });
+                }
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    const b = bubbles[i];
+                    b.y -= b.speed;
+                    const pbox = { x: player.x + player.hitboxPadding, y: player.y + player.hitboxPadding, width: player.width - player.hitboxPadding * 2, height: player.height - player.hitboxPadding * 2 };
+                    const cX = Math.max(pbox.x, Math.min(b.x, pbox.x + pbox.width));
+                    const cY = Math.max(pbox.y, Math.min(b.y, pbox.y + pbox.height));
+                    if (((b.x - cX) ** 2 + (b.y - cY) ** 2) < (b.radius ** 2)) setGameOver();
+                    
+                    if (b.y - b.radius < getFoamTop(b.x)) {
+                        bubbles.splice(i, 1);
+                        if (!gameOver) stats.bubblesDodged++;
+                    }
+                }
+
+                // Score and foam animation
                 score = Math.floor((Date.now() - startTime) / 1000);
                 foamXOffset += 0.5;
                 foamYOffset += 1;
             }
 
+            function getFoamTop(x) {
+                const base = wrapper.clientHeight * 0.12, lump = wrapper.clientHeight * 0.025, swell = wrapper.clientHeight * 0.01;
+                return base + Math.sin((x + foamXOffset) / (wrapper.clientWidth * 0.1)) * lump + Math.sin(foamYOffset / 50) * swell;
+            }
+
+            function render() {
+                ctx.drawImage(beerCanvas, 0, 0);
+
+                // Draw foam
+                const foamColor1 = '#FFFFFF', foamColor2 = '#fde68a';
+                const baseFoamLine = wrapper.clientHeight * 0.12 + wrapper.clientHeight * 0.025 * 3;
+                for (let y = 0; y < baseFoamLine; y += PIXEL_SCALE) {
+                    for (let x = 0; x < wrapper.clientWidth; x += PIXEL_SCALE) {
+                        if (y < getFoamTop(x)) {
+                            ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 3 === 0) ? foamColor2 : foamColor1;
+                            ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
+                        }
+                    }
+                }
+
+                // Draw bubbles
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                bubbles.forEach(b => {
+                    const x = Math.floor(b.x / PIXEL_SCALE) * PIXEL_SCALE, y = Math.floor(b.y / PIXEL_SCALE) * PIXEL_SCALE, r = b.radius / PIXEL_SCALE;
+                    for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) if (i*i + j*j <= r*r) ctx.fillRect(x + i*PIXEL_SCALE, y + j*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                    if (r > 1) {
+                         ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+                         ctx.fillRect(x - Math.floor(r/2)*PIXEL_SCALE, y - Math.floor(r/2)*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
+                         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    }
+                });
+
+                // Draw player and score
+                if (player) ctx.drawImage(player.isBoosting ? player.jump : player.default, player.x, player.y, player.width, player.height);
+                const scoreText = `Time: ${score}s`;
+                ctx.font = '16px "Press Start 2P"';
+                const textWidth = ctx.measureText(scoreText).width;
+                const boxX = (wrapper.clientWidth - textWidth) / 2 - 12;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.fillRect(boxX, 20, textWidth + 24, 40);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(scoreText, wrapper.clientWidth / 2, 42);
+            }
+
             function gameLoop(currentTime) {
-                if (gameOver) { cancelAnimationFrame(animationFrameId); return; }
+                if (gameOver) return;
                 if (lastTime === 0) lastTime = currentTime;
-                const deltaTime = currentTime - lastTime;
+                accumulator += currentTime - lastTime;
                 lastTime = currentTime;
-                accumulator += deltaTime;
                 while (accumulator >= timeStep) {
                     update();
                     accumulator -= timeStep;
@@ -346,232 +330,145 @@ This is a logic-only change; here is the complete updated code.
                 render();
                 animationFrameId = requestAnimationFrame(gameLoop);
             }
+
+            // --- Event Handlers and UI Management ---
+            function setGameOver() {
+                gameOver = true;
+                stats.totalTime += score;
+                if (score > highScore) {
+                    highScore = score;
+                    stats.longestRun = score;
+                    newHighScoreTextEl.classList.remove('hidden');
+                }
+                saveStats();
+                finalScoreEl.textContent = `${score} seconds`;
+                highScoreEl.textContent = `${highScore} seconds`;
+                showScreen('gameOverScreen');
+            }
             
+            function showScreen(screenId) {
+                ['startScreen', 'gameOverScreen', 'statsScreen'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (id === screenId) {
+                        el.classList.remove('hidden');
+                        el.classList.add('flex');
+                    } else {
+                        el.classList.add('hidden');
+                        el.classList.remove('flex');
+                    }
+                });
+            }
+
+            function handlePlayerAction(type) {
+                if (!player || gameOver) return;
+                if (type === 'jump') {
+                    player.dy = -GAME_SETTINGS.jumpPower;
+                    player.isDiving = false;
+                    stats.totalJumps++;
+                } else if (type === 'dive') {
+                    if (!player.isDiving) stats.totalDives++;
+                    player.isDiving = true;
+                }
+            }
+
             function handleKeyDown(e) {
                 if (gameOver && e.code === 'Space') {
                     startGame();
                     return;
                 }
-                if (!player || gameOver) return;
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
-                    if (!player.isDiving) stats.totalDives++;
-                    keys.down = true;
-                    player.isDiving = true;
-                }
-                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
-                    if (!e.repeat) {
-                        player.dy = -player.jumpPower;
-                        player.isDiving = false;
-                        stats.totalJumps++;
-                    }
-                }
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.down = true; handlePlayerAction('dive'); }
+                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') if (!e.repeat) handlePlayerAction('jump');
             }
-            
+
+            function handleKeyUp(e) {
+                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.down = false; if (player) player.isDiving = false; }
+            }
+
+            function handleTouchStart(e) { e.preventDefault(); touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }
             function handleTouchEnd(e) {
                 e.preventDefault();
-                if (gameOver || !player) return;
-                const touchEndX = e.changedTouches[0].screenX, touchEndY = e.changedTouches[0].screenY;
-                const deltaX = touchEndX - touchStartX, deltaY = touchEndY - touchStartY;
-                if (deltaY > 40 && Math.abs(deltaX) < 50) {
-                    if (!player.isDiving) stats.totalDives++;
-                    player.isDiving = true;
-                } else if (deltaY < -40 && Math.abs(deltaX) < 50) {
-                    player.dy = -player.jumpPower;
-                    player.isDiving = false;
-                    stats.totalJumps++;
-                } else if (Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) {
-                    player.dy = -player.jumpPower;
-                    player.isDiving = false;
-                    stats.totalJumps++;
-                }
-                touchStartX = 0; touchStartY = 0;
+                const deltaY = e.changedTouches[0].screenY - touchStartY;
+                const deltaX = e.changedTouches[0].screenX - touchStartX;
+                if (deltaY > 40 && Math.abs(deltaX) < 50) handlePlayerAction('dive');
+                else if (deltaY < -40 || Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) handlePlayerAction('jump');
+            }
+
+            function handleOrientation(e) {
+                if (neutralBeta === null && e.beta !== null) neutralBeta = e.beta;
+                if (motionControlsEnabled && player && e.gamma !== null) player.dx = e.gamma * GAME_SETTINGS.tiltSensitivity;
             }
 
             function startGame() {
-                startScreen.classList.add('hidden');
-                gameOverScreen.classList.add('hidden');
-                gameOverScreen.classList.remove('flex');
-
+                showScreen(null); // Hide all screens
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                if (isTouchDevice) {
-                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        DeviceOrientationEvent.requestPermission().then(p => {
-                            if (p === 'granted') {
-                                window.addEventListener('deviceorientation', handleOrientation);
-                                motionControlsEnabled = true;
-                            }
-                        }).catch(console.error);
-                    } else if ('DeviceOrientationEvent' in window) {
-                        window.addEventListener('deviceorientation', handleOrientation);
-                        motionControlsEnabled = true;
-                    }
+                if (isTouchDevice && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission().then(p => {
+                        motionControlsEnabled = p === 'granted';
+                    }).catch(() => motionControlsEnabled = false);
+                } else {
+                    motionControlsEnabled = isTouchDevice && 'DeviceOrientationEvent' in window;
                 }
                 init();
             }
 
+            // --- Initial Setup ---
             function setup() {
                 loadStats();
-                resizeCanvas();
                 const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                motionControlsEnabled = false;
-                if (isTouchDevice) {
-                    startTitle.textContent = "Hold Device Flat";
-                    startSubtitle.innerHTML = "Tilt to Move<br>Tap to Jump<br>Swipe Down to Dive";
-                    canvas.addEventListener('touchstart', handleTouchStart);
-                    canvas.addEventListener('touchend', handleTouchEnd);
-                } else {
-                    startTitle.textContent = "Arrows/WASD to Move";
-                    startSubtitle.innerHTML = "Space to Jump<br>S/Down to Dive";
-                }
+                startTitleEl.textContent = isTouchDevice ? "Hold Device Flat" : "Arrows/WASD to Move";
+                startSubtitleEl.innerHTML = isTouchDevice ? "Tilt to Move<br>Tap to Jump<br>Swipe Down to Dive" : "Space to Jump<br>S/Down to Dive";
                 
-                startButton.addEventListener('click', startGame);
-                retryButton.addEventListener('click', startGame);
+                // Pre-generate sprites
+                const defaultMap = ["W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______"];
+                const jumpMap = ["__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______"];
+                const beerColors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                const redColors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                characterSprites.beer.default.src = createPlayerSprite(defaultMap, beerColors);
+                characterSprites.beer.jump.src = createPlayerSprite(jumpMap, beerColors);
+                characterSprites.red.default.src = createPlayerSprite(defaultMap, redColors);
+                characterSprites.red.jump.src = createPlayerSprite(jumpMap, redColors);
                 
-                statsButton.addEventListener('click', () => {
-                    updateStatsDisplay();
-                    startScreen.classList.add('hidden');
-                    statsScreen.classList.remove('hidden');
-                    statsScreen.classList.add('flex');
+                // Set up event listeners
+                uiContainer.addEventListener('click', e => {
+                    const action = e.target.dataset.action;
+                    if (action === 'start-game' || action === 'retry') startGame();
+                    else if (action === 'main-menu') showScreen('startScreen');
+                    else if (action === 'view-stats') { updateStatsDisplay(); showScreen('statsScreen'); }
+                    else if (action === 'reset-stats') { if (confirm("Reset all stats? This cannot be undone.")) { stats = getDefaultStats(); saveStats(); updateStatsDisplay(); } }
                 });
-
-                backButton.addEventListener('click', () => {
-                    statsScreen.classList.add('hidden');
-                    statsScreen.classList.remove('flex');
-                    startScreen.classList.remove('hidden');
-                });
-
-                resetStatsButton.addEventListener('click', resetStats);
                 
-                mainMenuButton.addEventListener('click', () => {
-                    gameOverScreen.classList.add('hidden');
-                    gameOverScreen.classList.remove('flex');
-                    startScreen.classList.remove('hidden');
-                });
-
                 window.addEventListener('keydown', handleKeyDown);
                 window.addEventListener('keyup', handleKeyUp);
-                window.addEventListener('resize', resizeCanvas);
-            }
-            
-            // Functions omitted for brevity are re-included here for completeness
-            const movePlayer = function() {
-                if (!player) return;
-                if (!motionControlsEnabled) {
-                    if (keys.right) player.dx += player.acceleration;
-                    else if (keys.left) player.dx -= player.acceleration;
-                    else player.dx *= player.friction;
-                }
-                if (player.dx > player.speed) player.dx = player.speed;
-                if (player.dx < -player.speed) player.dx = -player.speed;
-                player.dy += GAME_SETTINGS.gravity;
-                if (player.isDiving) player.dy += GAME_SETTINGS.diveAcceleration;
-                const currentMaxFallSpeed = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
-                if (player.dy > currentMaxFallSpeed) player.dy = currentMaxFallSpeed;
-                // CHANGED: Jump sprite only shows when moving up.
-                player.isBoosting = (player.dy < 0);
-                player.x += player.dx;
-                player.y += player.dy;
-                if (player.x < 0) { player.x = 0; player.dx = 0; }
-                if (player.x + player.width > canvasWidth) { player.x = canvasWidth - player.width; player.dx = 0; }
-                if (player.y + player.height > canvasHeight) { player.y = canvasHeight - player.height; player.dy = 0; }
-                const foamTopAtPlayer = getFoamTop(player.x + player.width / 2);
-                if (player.y < foamTopAtPlayer) {
-                    player.y = foamTopAtPlayer;
-                    player.dy = 0;
-                    if (player.isDiving) player.isDiving = false;
-                }
-            }
-            const updateBubbles = function() {
-                if (gameSpeed < 1) gameSpeed += GAME_SETTINGS.gameSpeedRamp;
-                if (Math.random() < GAME_SETTINGS.bubbleDensity + gameSpeed * 0.08) {
-                    bubbles.push({ x: Math.random() * (canvasWidth - 20) + 10, y: canvasHeight + 20,
-                        radius: (Math.floor(Math.random() * 4) + 1) * PIXEL_SCALE,
-                        speed: (GAME_SETTINGS.initialBubbleSpeed + (Math.random() * GAME_SETTINGS.bubbleSpeedVariance)) * (1 + gameSpeed)
-                    });
-                }
-                for (let i = bubbles.length - 1; i >= 0; i--) {
-                    const b = bubbles[i];
-                    b.y -= b.speed;
-                    if (player) {
-                        const pbox = { x: player.x + player.hitboxPadding, y: player.y + player.hitboxPadding, width: player.width - player.hitboxPadding*2, height: player.height - player.hitboxPadding*2 };
-                        const cX = Math.max(pbox.x, Math.min(b.x, pbox.x + pbox.width));
-                        const cY = Math.max(pbox.y, Math.min(b.y, pbox.y + pbox.height));
-                        if (((b.x - cX) ** 2 + (b.y - cY) ** 2) < (b.radius ** 2)) setGameOver();
-                    }
-                    const foamTopAtBubble = getFoamTop(b.x);
-                    if (b.y - b.radius < foamTopAtBubble) {
-                        bubbles.splice(i, 1);
-                        if (!gameOver) stats.bubblesDodged++;
+                canvas.addEventListener('touchstart', handleTouchStart);
+                canvas.addEventListener('touchend', handleTouchEnd);
+                window.addEventListener('deviceorientation', handleOrientation);
+                window.addEventListener('resize', () => {
+                    canvas.width = wrapper.clientWidth;
+                    canvas.height = wrapper.clientHeight;
+                    ctx.imageSmoothingEnabled = false;
+                    const bgCtx = beerCanvas.getContext('2d');
+                    bgCtx.imageSmoothingEnabled = false;
+                });
+                
+                // Initial render
+                canvas.width = wrapper.clientWidth;
+                canvas.height = wrapper.clientHeight;
+                beerCanvas = document.createElement('canvas');
+                beerCanvas.width = canvas.width;
+                beerCanvas.height = canvas.height;
+                const bgCtx = beerCanvas.getContext('2d');
+                const beerColor1 = '#FBBF24', beerColor2 = '#F59E0B';
+                 for (let y = 0; y < canvas.height; y += PIXEL_SCALE) {
+                    for (let x = 0; x < canvas.width; x += PIXEL_SCALE) {
+                        bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
+                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
                     }
                 }
-            }
-            const render = function() {
                 ctx.drawImage(beerCanvas, 0, 0);
-                const foamColor1 = '#FFFFFF', foamColor2 = '#fde68a';
-                const foamLumpiness = canvasHeight * 0.025, baseFoamLine = canvasHeight * 0.12;
-                for (let y = 0; y < baseFoamLine + foamLumpiness * 3; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvasWidth; x += PIXEL_SCALE) {
-                        if (y < getFoamTop(x)) {
-                            ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 3 === 0) ? foamColor2 : foamColor1;
-                            ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                        }
-                    }
-                }
-                for (const b of bubbles) drawPixelBubble(b);
-                drawPlayer();
-                drawScore();
-            }
-            const drawPlayer = function() {
-                if (!player) return;
-                const currentSprite = player.isBoosting ? playerSpriteJump : playerSpriteDefault;
-                ctx.drawImage(currentSprite, player.x, player.y, player.width, player.height);
-            }
-            const drawScore = function() {
-                const scoreText = `Time: ${score}s`;
-                ctx.font = '16px "Press Start 2P"';
-                const textMetrics = ctx.measureText(scoreText), textWidth = textMetrics.width, textHeight = 16, padding = 12;
-                const boxWidth = Math.ceil((textWidth + padding * 2) / PIXEL_SCALE) * PIXEL_SCALE;
-                const boxHeight = Math.ceil((textHeight + padding) / PIXEL_SCALE) * PIXEL_SCALE;
-                const boxX = Math.floor((canvasWidth - boxWidth) / 2), boxY = 20;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(scoreText, canvasWidth / 2, boxY + boxHeight / 2 + 2);
-            }
-            const drawPixelBubble = function(bubble) {
-                const x = Math.floor(bubble.x / PIXEL_SCALE) * PIXEL_SCALE, y = Math.floor(bubble.y / PIXEL_SCALE) * PIXEL_SCALE, r = bubble.radius / PIXEL_SCALE;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                for (let i = -r; i <= r; i++) {
-                    for (let j = -r; j <= r; j++) {
-                        if (i*i + j*j <= r*r) ctx.fillRect(x + i*PIXEL_SCALE, y + j*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-                if (r > 1) {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-                    ctx.fillRect(x - Math.floor(r/2)*PIXEL_SCALE, y - Math.floor(r/2)*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                }
-            }
-            const handleKeyUp = function(e) {
-                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
-                    keys.down = false;
-                    if (player) player.isDiving = false;
-                }
-            }
-            const handleOrientation = function(event) {
-                if (neutralBeta === null && event.beta !== null) neutralBeta = event.beta;
-                const tiltLR = event.gamma;
-                if (motionControlsEnabled && player && tiltLR !== null) player.dx = tiltLR * GAME_SETTINGS.tiltSensitivity;
-            }
-            const handleTouchStart = function(e) {
-                e.preventDefault();
-                touchStartX = e.changedTouches[0].screenX;
-                touchStartY = e.changedTouches[0].screenY;
             }
 
             setup();
@@ -579,4 +476,3 @@ This is a logic-only change; here is the complete updated code.
     </script>
 </body>
 </html>
-```
