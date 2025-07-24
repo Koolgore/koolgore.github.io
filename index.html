@@ -1,15 +1,4 @@
-Of course. I've updated the game so that when a round ends, you are returned to the main menu instead of immediately restarting. This allows you to view the stats screen before playing again.
 
-### Summary of Changes
-
-  * **Game Over Flow:** The "Try Again" button and the Spacebar on the game over screen will now take you back to the main start screen.
-  * **Access Stats:** From the main menu, you can then choose to view your stats or start a new game.
-
-Here is the complete updated code.
-
------
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,10 +49,15 @@ Here is the complete updated code.
                 <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
                 <p class="text-lg text-white mb-2">You Survived: <span id="finalScore">0</span></p>
                 <p class="text-lg text-white mb-6">High Score: <span id="highScore">0</span></p>
-                <button id="restartButton" class="px-8 py-4 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-lg">
-                    Main Menu
-                </button>
-                 <p class="text-sm text-gray-400 mt-4">(or press Space)</p>
+                <div class="flex gap-x-4">
+                    <button id="retryButton" class="px-8 py-4 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-lg">
+                        Retry
+                    </button>
+                    <button id="mainMenuButton" class="px-6 py-4 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors text-base">
+                        Main Menu
+                    </button>
+                </div>
+                 <p class="text-sm text-gray-400 mt-4">(or press Space to Retry)</p>
             </div>
 
             <div id="statsScreen" class="absolute inset-0 bg-black bg-opacity-90 flex-col items-center justify-center text-center p-4 hidden">
@@ -96,7 +90,7 @@ Here is the complete updated code.
                     View Stats
                 </button>
             </div>
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.7.2</div>
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.7.3</div>
         </div>
     </div>
 
@@ -112,7 +106,8 @@ Here is the complete updated code.
             const statsScreen = document.getElementById('statsScreen');
 
             // Button elements
-            const restartButton = document.getElementById('restartButton');
+            const mainMenuButton = document.getElementById('mainMenuButton');
+            const retryButton = document.getElementById('retryButton');
             const startButton = document.getElementById('startButton');
             const statsButton = document.getElementById('statsButton');
             const backButton = document.getElementById('backButton');
@@ -342,9 +337,7 @@ Here is the complete updated code.
             
             function handleKeyDown(e) {
                 if (gameOver && e.code === 'Space') {
-                    gameOverScreen.classList.add('hidden');
-                    gameOverScreen.classList.remove('flex');
-                    startScreen.classList.remove('hidden');
+                    startGame();
                     return;
                 }
                 if (!player || gameOver) return;
@@ -422,6 +415,7 @@ Here is the complete updated code.
                 }
                 
                 startButton.addEventListener('click', startGame);
+                retryButton.addEventListener('click', startGame);
                 
                 statsButton.addEventListener('click', () => {
                     updateStatsDisplay();
@@ -438,7 +432,7 @@ Here is the complete updated code.
 
                 resetStatsButton.addEventListener('click', resetStats);
                 
-                restartButton.addEventListener('click', () => {
+                mainMenuButton.addEventListener('click', () => {
                     gameOverScreen.classList.add('hidden');
                     gameOverScreen.classList.remove('flex');
                     startScreen.classList.remove('hidden');
