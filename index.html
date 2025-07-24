@@ -1,3 +1,12 @@
+You're right, that makes more sense visually. When diving, the fly should look like it's falling, not jumping.
+
+I've adjusted the sprite logic so that the "jump" sprite is now only used when the fly is actively moving upwards. When diving or falling, it will use the default sprite.
+
+This is a logic-only change; here is the complete updated code.
+
+-----
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,6 +52,7 @@
         <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
             <canvas id="gameCanvas"></canvas>
             
+            <!-- Game Over Screen -->
             <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
                 <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
                 <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
@@ -59,6 +69,7 @@
                  <p class="text-sm text-gray-400 mt-4">(or press Space to Retry)</p>
             </div>
 
+            <!-- Stats Screen -->
             <div id="statsScreen" class="absolute inset-0 bg-black bg-opacity-90 flex-col items-center justify-center text-center p-4 hidden">
                 <h2 class="text-3xl text-white mb-6">Player Stats</h2>
                 <div class="text-left w-full max-w-xs mx-auto space-y-2 text-lg">
@@ -79,6 +90,7 @@
                 </div>
             </div>
 
+            <!-- Start Screen -->
             <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
                 <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
                 <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
@@ -89,7 +101,8 @@
                     View Stats
                 </button>
             </div>
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.7.4</div>
+            <!-- Version Number -->
+            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.7.5</div>
         </div>
     </div>
 
@@ -456,7 +469,8 @@
                 if (player.isDiving) player.dy += GAME_SETTINGS.diveAcceleration;
                 const currentMaxFallSpeed = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : player.maxFallSpeed;
                 if (player.dy > currentMaxFallSpeed) player.dy = currentMaxFallSpeed;
-                player.isBoosting = (player.dy < 0 || player.isDiving);
+                // CHANGED: Jump sprite only shows when moving up.
+                player.isBoosting = (player.dy < 0);
                 player.x += player.dx;
                 player.y += player.dy;
                 if (player.x < 0) { player.x = 0; player.dx = 0; }
