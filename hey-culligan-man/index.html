@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hey Culligan Man</title>
+  <style>
+    body { font-family: sans-serif; background:#222; color:#eee; margin:0; text-align:center; }
+    .hidden { display:none; }
+    #board-container { margin:10px auto; }
+    .board-grid { display:grid; grid-template-rows:repeat(var(--rows), var(--tile-size)); grid-template-columns:repeat(var(--cols), var(--tile-size)); gap:2px; justify-content:center; }
+    .tile { width:var(--tile-size); height:var(--tile-size); display:grid; grid-template:repeat(3,1fr)/repeat(3,1fr); position:relative; background:#333; }
+    .tile.empty { border:1px dashed #555; }
+    .space { border:1px solid #444; box-sizing:border-box; position:relative; }
+    .soft{background:#3CB371;}
+    .hard{background:#8A2BE2;}
+    .neutral{background:#1E90FF;}
+    .token{width:16px;height:16px;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);}
+    .selectable{outline:2px solid yellow;cursor:pointer;}
+    .placement{outline:2px dashed yellow;cursor:pointer;}
+    .tile.finish{box-shadow:0 0 0 2px gold inset;}
+    #dice-display .die{font-size:2rem;margin:0 2px;}
+    .control-btn{margin-top:10px;}
+  </style>
+</head>
+<body>
+  <div id="main-menu">
+    <h1>Hey Culligan Man</h1>
+    <p>Select a game mode:</p>
+    <div>
+      <button class="menu-btn" data-players="2" data-cpu="false">2 Players</button>
+      <button class="menu-btn" data-players="3" data-cpu="false">3 Players</button>
+      <button class="menu-btn" data-players="4" data-cpu="false">4 Players</button>
+      <button class="menu-btn" data-players="2" data-cpu="true">1 vs CPU</button>
+    </div>
+  </div>
+  <div id="game-ui" class="hidden">
+    <div id="turn-indicator"></div>
+    <div id="board-container"></div>
+    <div id="controls">
+      <button id="roll-dice">Roll Dice</button>
+      <button id="skip-shift" class="hidden">Skip Shift</button>
+      <div id="dice-display"></div>
+      <p id="action-text"></p>
+      <div id="controls-container"></div>
+    </div>
+  </div>
+  <div id="overlay"></div>
+  <script src="game.js"></script>
+</body>
+</html>
+
