@@ -193,8 +193,8 @@
             // --- Game Initialization ---
             function init() {
                 // Randomize character and set sprites
-                const characterKeys = Object.keys(characterSprites);
-                const selectedCharacter = characterKeys[Math.floor(Math.random() * characterKeys.length)];
+                const characterOptions = ['beer', 'red', 'blue', 'green'];
+                const selectedCharacter = characterOptions[Math.floor(Math.random() * characterOptions.length)];
                 player = {
                     ...characterSprites[selectedCharacter],
                     x: wrapper.clientWidth / 2 - PLAYER_WIDTH / 2, y: wrapper.clientHeight / 3,
