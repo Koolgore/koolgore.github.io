@@ -138,7 +138,9 @@
             let beerCanvas = null;
             const characterSprites = {
                 beer: { default: new Image(), jump: new Image() },
-                red: { default: new Image(), jump: new Image() }
+                red: { default: new Image(), jump: new Image() },
+                blue: { default: new Image(), jump: new Image() },
+                green: { default: new Image(), jump: new Image() }
             };
             const keys = { right: false, left: false, down: false };
             let touchStartX = 0, touchStartY = 0;
@@ -191,8 +193,8 @@
             // --- Game Initialization ---
             function init() {
                 // Randomize character and set sprites
-                const characterKeys = Object.keys(characterSprites);
-                const selectedCharacter = characterKeys[Math.floor(Math.random() * characterKeys.length)];
+                const characterOptions = ['beer', 'red', 'blue', 'green'];
+                const selectedCharacter = characterOptions[Math.floor(Math.random() * characterOptions.length)];
                 player = {
                     ...characterSprites[selectedCharacter],
                     x: wrapper.clientWidth / 2 - PLAYER_WIDTH / 2, y: wrapper.clientHeight / 3,
@@ -427,10 +429,16 @@
                 const jumpMap = ["__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______"];
                 const beerColors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
                 const redColors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                const blueColors = { 'B': '#0000ff', 'R': '#000000', 'W': 'rgba(255, 255, 255, 0.7)' };
+                const greenColors = { 'B': '#00ff00', 'R': '#000000', 'W': 'rgba(255, 255, 255, 0.7)' };
                 characterSprites.beer.default.src = createPlayerSprite(defaultMap, beerColors);
                 characterSprites.beer.jump.src = createPlayerSprite(jumpMap, beerColors);
                 characterSprites.red.default.src = createPlayerSprite(defaultMap, redColors);
                 characterSprites.red.jump.src = createPlayerSprite(jumpMap, redColors);
+                characterSprites.blue.default.src = createPlayerSprite(defaultMap, blueColors);
+                characterSprites.blue.jump.src = createPlayerSprite(jumpMap, blueColors);
+                characterSprites.green.default.src = createPlayerSprite(defaultMap, greenColors);
+                characterSprites.green.jump.src = createPlayerSprite(jumpMap, greenColors);
                 
                 // Set up event listeners
                 uiContainer.addEventListener('click', e => {
