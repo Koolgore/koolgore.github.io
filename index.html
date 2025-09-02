@@ -201,7 +201,8 @@
            
             // --- API Functions ---
             const fetchWithProxy = async (url, retries = 3, delay = 1000) => {
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                // FIX: Switched to a different, potentially more reliable CORS proxy.
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 for (let i = 0; i < retries; i++) {
                     try {
                         console.info(`Attempt ${i + 1} to fetch: ${url.substring(0, 100)}...`);
@@ -231,7 +232,8 @@
                     console.log(`Fetched from /${endpoint}:`, data);
                     return data;
                 } catch (error) {
-                    console.error("Failed to fetch from API:", error);
+                    // FIX: More descriptive error logging
+                    console.error("Failed to fetch from API. The proxy or the API might be down. Error:", error);
                     noResults.textContent = 'Error loading heads. Please try again later.';
                     noResults.classList.remove('hidden');
                     return [];
@@ -440,3 +442,4 @@
     </script>
 </body>
 </html>
+
