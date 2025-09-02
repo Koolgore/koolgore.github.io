@@ -132,6 +132,9 @@
 
             function formatMessage(args) {
                 return args.map(arg => {
+                    if (arg instanceof Error) {
+                        return arg.stack;
+                    }
                     if (typeof arg === 'object' && arg !== null) {
                         try {
                             return JSON.stringify(arg, null, 2); // Pretty print objects
@@ -201,13 +204,13 @@
            
             // --- API Functions ---
             const fetchWithProxy = async (url, retries = 3, delay = 1000) => {
-                // FIX: Switched to a different, potentially more reliable CORS proxy.
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                // FIX: Switched to a different, more reliable proxy to avoid security page blocks.
+                const proxyUrl = `https://thingproxy.freeboard.io/fetch/${url}`;
                 for (let i = 0; i < retries; i++) {
                     try {
-                        console.info(`Attempt ${i + 1} to fetch: ${url.substring(0, 100)}...`);
+                        console.info(`Attempt ${i + 1} to fetch via new proxy: ${url.substring(0, 100)}...`);
                         const response = await fetch(proxyUrl);
-                        if (!response.ok) throw new Error(`Proxy error! status: ${response.status}`);
+                        if (!response.ok) throw new Error(`Proxy error! status: ${response.status} ${response.statusText}`);
                         return response;
                     } catch (error) {
                         console.warn(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
@@ -228,12 +231,18 @@
                 try {
                     const apiUrl = `${API_BASE_URL}/${endpoint}`;
                     const response = await fetchWithProxy(apiUrl);
-                    const data = await response.json();
-                    console.log(`Fetched from /${endpoint}:`, data);
-                    return data;
+
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.includes("application/json")) {
+                        const data = await response.json();
+                        console.log(`Successfully fetched and parsed JSON from /${endpoint}`);
+                        return data;
+                    } else {
+                        const responseText = await response.text();
+                        throw new Error(`Invalid content type from proxy. Expected JSON, but got ${contentType}. Response: ${responseText.substring(0, 100)}...`);
+                    }
                 } catch (error) {
-                    // FIX: More descriptive error logging
-                    console.error("Failed to fetch from API. The proxy or the API might be down. Error:", error);
+                    console.error("Failed to fetch from API. The proxy or the API might be down.", error);
                     noResults.textContent = 'Error loading heads. Please try again later.';
                     noResults.classList.remove('hidden');
                     return [];
@@ -280,9 +289,9 @@
                 cartItemsContainer.innerHTML = '';
                 cartCount.textContent = cart.length;
                 checkoutBtn.disabled = cart.length === 0;
-                cartEmptyMsg.classList.toggle('hidden', cart.length > 0);
-
+                
                 if (cart.length > 0) {
+                     cartEmptyMsg.classList.add('hidden');
                      cart.forEach(item => {
                         const cartItem = document.createElement('div');
                         cartItem.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-lg';
@@ -297,6 +306,7 @@
                     });
                 } else {
                     cartItemsContainer.appendChild(cartEmptyMsg);
+                    cartEmptyMsg.classList.remove('hidden');
                 }
             };
             
@@ -354,11 +364,20 @@
                 
                 const fetchPromises = cart.map(async (head) => {
                     try {
+                        if (!head.value) {
+                           throw new Error(`Head object for "${head.name}" is missing 'value' property.`);
+                        }
                         const decodedValue = atob(head.value);
                         const textureData = JSON.parse(decodedValue);
                         const skinUrl = textureData.textures.SKIN.url;
 
                         const response = await fetchWithProxy(skinUrl);
+                        
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.startsWith('image/')) {
+                            throw new Error(`Expected an image blob for ${head.name}, but got ${contentType}`);
+                        }
+
                         const blob = await response.blob();
                         
                         const name = (head.name || 'untitled').replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -388,7 +407,7 @@
                 } catch (zipError) {
                     console.error("Error generating ZIP file:", zipError);
                 } finally {
-                    checkoutBtn.disabled = cart.length !== 0; // Should be disabled if cart is now empty
+                    checkoutBtn.disabled = cart.length !== 0; 
                     checkoutLoader.classList.add('hidden');
                 }
             };
