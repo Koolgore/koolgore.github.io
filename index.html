@@ -1,486 +1,372 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beer Fly</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            font-family: 'Press Start 2P', cursive;
-            background-color: #1a1a1a;
-            color: #ffffff;
-            overflow: hidden;
-            touch-action: none;
-        }
-        canvas {
-            background-color: #000;
-            display: block;
-            margin: 0 auto;
-            cursor: pointer;
-            image-rendering: pixelated;
-        }
-        #game-container {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            height: 100vh;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Minecraft Head Hunter</title>
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- JSZip (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    /* Minimal scrollbars for dense grids */
+    * { scrollbar-width: thin; scrollbar-color: #64748b #0f172a; }
+    ::-webkit-scrollbar { height: 8px; width: 8px; }
+    ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 8px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+  </style>
 </head>
-<body class="bg-gray-900 flex items-center justify-center h-screen">
+<body class="bg-slate-950 text-slate-100">
+  <div id="app" class="mx-auto max-w-[1400px] min-h-screen grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 p-4">
 
-    <div id="game-container" class="w-full h-full">
-        <h1 class="text-2xl md:text-3xl mb-2 text-amber-300">Beer Fly</h1>
-        <div id="canvas-wrapper" class="relative w-full max-w-sm md:max-w-md aspect-[9/16] border-8 border-gray-400 rounded-xl shadow-2xl shadow-black">
-            <canvas id="gameCanvas"></canvas>
-            
-            <!-- UI Screens Container -->
-            <div id="ui-container">
-                <!-- Game Over Screen -->
-                <div id="gameOverScreen" class="absolute inset-0 bg-black bg-opacity-70 flex-col items-center justify-center text-center p-4 hidden">
-                    <h2 class="text-4xl text-red-500 mb-4">Wasted!</h2>
-                    <p id="newHighScoreText" class="text-xl text-yellow-300 mb-2 hidden">New High Score!</p>
-                    <p class="text-lg text-white mb-2">You Survived: <span id="finalScore">0</span></p>
-                    <p class="text-lg text-white mb-6">High Score: <span id="highScore">0</span></p>
-                    <div class="flex flex-col items-center gap-y-4">
-                        <button data-action="retry" class="px-10 py-5 bg-amber-400 text-black rounded-lg border-2 border-amber-200 hover:bg-amber-500 transition-colors text-xl">
-                            Retry
-                        </button>
-                        <button data-action="main-menu" class="px-6 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm">
-                            Main Menu
-                        </button>
-                    </div>
-                    <p class="text-sm text-gray-400 mt-4">(or press Space to Retry)</p>
-                </div>
-
-                <!-- Stats Screen -->
-                <div id="statsScreen" class="absolute inset-0 bg-black bg-opacity-90 flex-col items-center justify-center text-center p-4 hidden">
-                    <h2 class="text-3xl text-white mb-6">Player Stats</h2>
-                    <div class="text-left w-full max-w-xs mx-auto space-y-2 text-lg">
-                        <p class="flex justify-between"><span>Longest Run:</span> <span id="statLongestRun" class="text-yellow-300">0s</span></p>
-                        <p class="flex justify-between"><span>Total Play Time:</span> <span id="statTotalTime" class="text-yellow-300">0m</span></p>
-                        <p class="flex justify-between"><span>Games Played:</span> <span id="statGamesPlayed" class="text-yellow-300">0</span></p>
-                        <p class="flex justify-between"><span>Total Jumps:</span> <span id="statTotalJumps" class="text-yellow-300">0</span></p>
-                        <p class="flex justify-between"><span>Total Dives:</span> <span id="statTotalDives" class="text-yellow-300">0</span></p>
-                        <p class="flex justify-between"><span>Bubbles Dodged:</span> <span id="statBubblesDodged" class="text-yellow-300">0</span></p>
-                    </div>
-                    <div class="mt-8 flex gap-x-4">
-                        <button data-action="main-menu" class="px-8 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-colors">
-                            Back
-                        </button>
-                        <button data-action="reset-stats" class="px-8 py-3 bg-red-800 text-white rounded-lg hover:bg-red-700 transition-colors">
-                            Reset
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Start Screen -->
-                <div id="startScreen" class="absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center text-center p-4">
-                    <h2 id="startTitle" class="text-2xl text-white mb-4"></h2>
-                    <h3 id="startSubtitle" class="text-lg text-white mb-8 leading-relaxed"></h3>
-                    <button data-action="start-game" class="px-10 py-5 bg-amber-500 text-white rounded-lg text-xl animate-pulse">
-                        Start Game
-                    </button>
-                    <button data-action="view-stats" class="mt-6 px-6 py-2 bg-gray-700 text-white rounded-lg text-sm hover:bg-gray-600 transition-colors">
-                        View Stats
-                    </button>
-                </div>
-            </div>
-            <!-- Version Number -->
-            <div class="absolute bottom-2 right-2 text-xs text-gray-500">v.8.0</div>
+    <!-- MAIN COLUMN -->
+    <div class="flex flex-col gap-4 min-w-0">
+      <!-- Header / Controls -->
+      <header class="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 sticky top-4 z-10 backdrop-blur supports-[backdrop-filter]:bg-slate-900/40">
+        <div class="flex flex-col md:flex-row md:items-end gap-3">
+          <div class="flex-1">
+            <h1 class="text-2xl font-bold tracking-tight">Minecraft Head Hunter</h1>
+            <p id="status" class="text-sm text-slate-400 mt-1">Loading catalog…</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            <label class="relative flex-1">
+              <input id="searchInput" type="search" placeholder="Search names or tags…" class="w-full h-11 rounded-xl bg-slate-800/70 border border-slate-700 px-4 pr-10 outline-none focus:ring-2 focus:ring-cyan-400/50" />
+              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">⌘K</span>
+            </label>
+            <select id="categorySelect" class="h-11 rounded-xl bg-slate-800/70 border border-slate-700 px-4 outline-none focus:ring-2 focus:ring-cyan-400/50">
+              <option value="__ALL__">All categories</option>
+            </select>
+          </div>
         </div>
+      </header>
+
+      <!-- Grid -->
+      <section class="rounded-2xl bg-slate-900/50 border border-slate-800 p-3">
+        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2"></div>
+        <div id="sentinel" class="py-6 text-center text-slate-400">Loading more…</div>
+      </section>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- Constants and Game Settings ---
-            const PIXEL_SCALE = 4;
-            const PLAYER_WIDTH = 28;
-            const PLAYER_HEIGHT = 28;
-            const GAME_SETTINGS = {
-                gravity: 0.1, jumpPower: 4.5, maxFallSpeed: 1.5, playerSpeed: 3,
-                playerAcceleration: 0.3, playerFriction: 0.95, diveAcceleration: 0.3,
-                maxDiveSpeed: 5.0, tiltSensitivity: 0.25, gameSpeedRamp: 0.005,
-                initialBubbleSpeed: 1.0, bubbleSpeedVariance: 0.5, bubbleDensity: 0.01,
-            };
+    <!-- CART SIDEBAR -->
+    <aside class="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 h-fit sticky top-4">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold">Cart</h2>
+        <span id="cartCount" class="inline-flex items-center justify-center rounded-full bg-cyan-500/20 text-cyan-300 text-sm px-2 py-1">0</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-1">Click any head to add it to your cart. Remove from the list below.</p>
 
-            // --- Canvas and DOM Elements ---
-            const canvas = document.getElementById('gameCanvas');
-            const ctx = canvas.getContext('2d');
-            const wrapper = document.getElementById('canvas-wrapper');
-            const uiContainer = document.getElementById('ui-container');
-            const finalScoreEl = document.getElementById('finalScore');
-            const highScoreEl = document.getElementById('highScore');
-            const newHighScoreTextEl = document.getElementById('newHighScoreText');
-            const startTitleEl = document.getElementById('startTitle');
-            const startSubtitleEl = document.getElementById('startSubtitle');
-            const statElements = {
-                longestRun: document.getElementById('statLongestRun'),
-                totalTime: document.getElementById('statTotalTime'),
-                gamesPlayed: document.getElementById('statGamesPlayed'),
-                totalJumps: document.getElementById('statTotalJumps'),
-                totalDives: document.getElementById('statTotalDives'),
-                bubblesDodged: document.getElementById('statBubblesDodged')
-            };
+      <ul id="cartList" class="divide-y divide-slate-800 mt-3 max-h-[55vh] overflow-auto"></ul>
 
-            // --- Game State Variables ---
-            let player, bubbles, score, gameSpeed, gameOver, animationFrameId, startTime, stats, highScore;
-            let foamXOffset = 0, foamYOffset = 0;
-            let motionControlsEnabled = false, neutralBeta = null;
-            let lastTime = 0, accumulator = 0;
-            const timeStep = 1000 / 60;
-            let beerCanvas = null;
-            const characterSprites = {
-                beer: { default: new Image(), jump: new Image() },
-                red: { default: new Image(), jump: new Image() },
-                blue: { default: new Image(), jump: new Image() },
-                green: { default: new Image(), jump: new Image() }
-            };
-            const keys = { right: false, left: false, down: false };
-            let touchStartX = 0, touchStartY = 0;
+      <button id="checkoutBtn" class="w-full mt-4 h-11 rounded-xl bg-cyan-500 text-slate-900 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cyan-400 transition">
+        Checkout & Download ZIP
+      </button>
+      <p id="checkoutNote" class="text-xs text-slate-400 mt-2">
+        Filenames use <code>name_tags_category.png</code>. You’ll get exactly what’s in the cart, nothing sneaky.
+      </p>
+    </aside>
+  </div>
 
-            // --- Sprite Generation ---
-            function createPlayerSprite(map, colors) {
-                const spriteCanvas = document.createElement('canvas');
-                spriteCanvas.width = PLAYER_WIDTH;
-                spriteCanvas.height = PLAYER_HEIGHT;
-                const sCtx = spriteCanvas.getContext('2d');
-                sCtx.imageSmoothingEnabled = false;
-                for (let y = 0; y < map.length; y++) {
-                    for (let x = 0; x < map[y].length; x++) {
-                        const char = map[y][x];
-                        if (char !== '_' && colors[char]) {
-                            sCtx.fillStyle = colors[char];
-                            sCtx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                        }
-                    }
-                }
-                return spriteCanvas.toDataURL();
-            }
+  <template id="cardTpl">
+    <button class="group relative rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 p-2 text-left">
+      <img class="h-16 w-16 mx-auto block rounded-md shadow" loading="lazy" />
+      <div class="mt-2">
+        <p class="text-sm font-medium line-clamp-1 name"></p>
+        <p class="text-[10px] text-slate-400 line-clamp-1 tags"></p>
+      </div>
+      <span class="absolute right-2 top-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-200 category"></span>
+      <span class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 text-xs font-semibold rounded-xl">Add to cart</span>
+    </button>
+  </template>
 
-            // --- Stats Management ---
-            function getDefaultStats() {
-                return { longestRun: 0, totalTime: 0, gamesPlayed: 0, totalJumps: 0, totalDives: 0, bubblesDodged: 0 };
-            }
+  <template id="cartItemTpl">
+    <li class="flex items-center gap-3 py-2">
+      <img class="h-10 w-10 rounded" />
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-medium truncate name"></p>
+        <p class="text-[10px] text-slate-400 truncate meta"></p>
+      </div>
+      <button class="remove text-xs px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700">Remove</button>
+    </li>
+  </template>
 
-            function loadStats() {
-                const savedStats = localStorage.getItem('beerFlyStats');
-                stats = savedStats ? JSON.parse(savedStats) : getDefaultStats();
-                highScore = stats.longestRun || 0;
-            }
+  <script>
+    // ---------------------- Utility ----------------------
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
-            function saveStats() {
-                localStorage.setItem('beerFlyStats', JSON.stringify(stats));
-            }
+    const slugify = (s) => (s || "")
+      .toLowerCase()
+      .normalize("NFKD").replace(/[^\w\s-]/g, "")
+      .trim().replace(/\s+/g, "-").replace(/-+/g, "-");
 
-            function updateStatsDisplay() {
-                statElements.longestRun.textContent = `${stats.longestRun}s`;
-                const minutes = Math.floor(stats.totalTime / 60);
-                statElements.totalTime.textContent = `${minutes}m ${stats.totalTime % 60}s`;
-                Object.keys(statElements).forEach(key => {
-                    if(stats[key] !== undefined && key !== 'longestRun' && key !== 'totalTime') {
-                       statElements[key].textContent = stats[key];
-                    }
-                });
-            }
+    const unique = (arr) => Array.from(new Set(arr.filter(Boolean)));
 
-            // --- Game Initialization ---
-            function init() {
-                // Randomize character and set sprites
-                const characterOptions = ['beer', 'red', 'blue', 'green'];
-                const selectedCharacter = characterOptions[Math.floor(Math.random() * characterOptions.length)];
-                player = {
-                    ...characterSprites[selectedCharacter],
-                    x: wrapper.clientWidth / 2 - PLAYER_WIDTH / 2, y: wrapper.clientHeight / 3,
-                    width: PLAYER_WIDTH, height: PLAYER_HEIGHT, dx: 0, dy: 0,
-                    isBoosting: false, isDiving: false, hitboxPadding: 4
-                };
+    // Try to fetch binary with CORS; if blocked, fall back to a proxy
+    async function fetchImageBlobWithFallback(url) {
+      // First try direct
+      try {
+        const res = await fetch(url, { mode: "cors" });
+        if (res.ok && res.type !== "opaque") return await res.blob();
+      } catch {}
+      // Fallback proxy: images.weserv.nl expects schema-less host in `url=`
+      const proxy = `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//, ""))}`;
+      const proxied = await fetch(proxy);
+      if (!proxied.ok) throw new Error("Image fetch failed");
+      return await proxied.blob();
+    }
 
-                stats.gamesPlayed++;
-                bubbles = [];
-                score = 0;
-                gameSpeed = 0;
-                gameOver = false;
-                startTime = Date.now();
-                neutralBeta = null;
-                
-                if (animationFrameId) cancelAnimationFrame(animationFrameId);
-                lastTime = 0;
-                accumulator = 0;
-                animationFrameId = requestAnimationFrame(gameLoop);
-            }
+    // Decode base64 head value -> textures URL, if needed
+    function extractTextureUrlFromValue(valueB64) {
+      try {
+        const json = JSON.parse(atob(valueB64));
+        return json?.textures?.SKIN?.url || null;
+      } catch { return null; }
+    }
 
-            // --- Game Loop: Update and Render ---
-            function update() {
-                // Player movement
-                if (!motionControlsEnabled) {
-                    if (keys.right) player.dx += GAME_SETTINGS.playerAcceleration;
-                    else if (keys.left) player.dx -= GAME_SETTINGS.playerAcceleration;
-                    else player.dx *= GAME_SETTINGS.playerFriction;
-                }
-                player.dx = Math.max(-GAME_SETTINGS.playerSpeed, Math.min(GAME_SETTINGS.playerSpeed, player.dx));
-                player.dy += GAME_SETTINGS.gravity;
-                if (player.isDiving) player.dy += GAME_SETTINGS.diveAcceleration;
-                const maxFall = player.isDiving ? GAME_SETTINGS.maxDiveSpeed : GAME_SETTINGS.maxFallSpeed;
-                player.dy = Math.min(player.dy, maxFall);
-                player.isBoosting = player.dy < 0;
-                player.x += player.dx;
-                player.y += player.dy;
+    // Standardize incoming record to our shape
+    function standardizeRecord(raw, idx = 0) {
+      // Attempt to locate fields across common community schemas
+      const name = raw.name || raw.Value?.name || raw.displayName || raw.title || `head-${idx}`;
+      const category = raw.category || raw.categories?.[0] || raw.type || "misc";
+      const tags = unique([...(raw.tags || []), ...(raw.keywords || []), ...(typeof raw.search === 'string' ? raw.search.split(',') : (raw.search || []))])
+        .map(t => String(t).trim()).filter(Boolean);
+      const textureUrl = raw.textureUrl || raw.texture || raw.image?.url || raw.url || extractTextureUrlFromValue(raw.value || raw.base64 || raw.b64 || raw.properties?.value) || null;
+      const texture = textureUrl && textureUrl.startsWith('http') ? textureUrl : (textureUrl ? `https://textures.minecraft.net/texture/${textureUrl}` : null);
+      const id = raw.uuid || raw.id || `${name}:${texture || idx}`;
+      return { id, name, category, tags, textureUrl: texture };
+    }
 
-                // Boundary checks
-                player.x = Math.max(0, Math.min(wrapper.clientWidth - player.width, player.x));
-                if (player.x === 0 || player.x === wrapper.clientWidth - player.width) player.dx = 0;
-                player.y = Math.max(0, Math.min(wrapper.clientHeight - player.height, player.y));
-                if (player.y === wrapper.clientHeight - player.height) player.dy = 0;
-                const foamTop = getFoamTop(player.x + player.width / 2);
-                if (player.y < foamTop) {
-                    player.y = foamTop;
-                    player.dy = 0;
-                    player.isDiving = false;
-                }
+    // ---------------------- State ----------------------
+    const state = {
+      all: [],
+      filtered: [],
+      categories: [],
+      visibleCount: 0,
+      pageSize: 160,
+      cart: new Map(), // key: id, value: head
+      loaded: false,
+    };
 
-                // Bubbles
-                if (gameSpeed < 1) gameSpeed += GAME_SETTINGS.gameSpeedRamp;
-                if (Math.random() < GAME_SETTINGS.bubbleDensity + gameSpeed * 0.08) {
-                    bubbles.push({
-                        x: Math.random() * (wrapper.clientWidth - 20) + 10, y: wrapper.clientHeight + 20,
-                        radius: (Math.floor(Math.random() * 4) + 1) * PIXEL_SCALE,
-                        speed: (GAME_SETTINGS.initialBubbleSpeed + Math.random() * GAME_SETTINGS.bubbleSpeedVariance) * (1 + gameSpeed)
-                    });
-                }
-                for (let i = bubbles.length - 1; i >= 0; i--) {
-                    const b = bubbles[i];
-                    b.y -= b.speed;
-                    const pbox = { x: player.x + player.hitboxPadding, y: player.y + player.hitboxPadding, width: player.width - player.hitboxPadding * 2, height: player.height - player.hitboxPadding * 2 };
-                    const cX = Math.max(pbox.x, Math.min(b.x, pbox.x + pbox.width));
-                    const cY = Math.max(pbox.y, Math.min(b.y, pbox.y + pbox.height));
-                    if (((b.x - cX) ** 2 + (b.y - cY) ** 2) < (b.radius ** 2)) setGameOver();
-                    
-                    if (b.y - b.radius < getFoamTop(b.x)) {
-                        bubbles.splice(i, 1);
-                        if (!gameOver) stats.bubblesDodged++;
-                    }
-                }
+    // ---------------------- DOM Refs ----------------------
+    const statusEl = $('#status');
+    const gridEl = $('#grid');
+    const sentinelEl = $('#sentinel');
+    const searchInput = $('#searchInput');
+    const categorySelect = $('#categorySelect');
+    const cartList = $('#cartList');
+    const cartCount = $('#cartCount');
+    const checkoutBtn = $('#checkoutBtn');
 
-                // Score and foam animation
-                score = Math.floor((Date.now() - startTime) / 1000);
-                foamXOffset += 0.5;
-                foamYOffset += 1;
-            }
+    // ---------------------- Data Loading ----------------------
+    const DATASET_URLS = [
+      // Widely mirrored community dataset (contains many custom heads)
+      'https://raw.githubusercontent.com/InventivetalentDev/minecraft-heads/master/heads.json',
+      // Alternative mirror(s) could be added here
+    ];
 
-            function getFoamTop(x) {
-                const base = wrapper.clientHeight * 0.12, lump = wrapper.clientHeight * 0.025, swell = wrapper.clientHeight * 0.01;
-                return base + Math.sin((x + foamXOffset) / (wrapper.clientWidth * 0.1)) * lump + Math.sin(foamYOffset / 50) * swell;
-            }
+    const SAMPLE_DATA = [
+      // Minimal sample so UI is testable offline
+      { name: 'Earth Globe', category: 'decoration', tags: ['planet','earth','globe'], textureUrl: 'https://textures.minecraft.net/texture/4b4d8a2d9a7e9d0c3c4c3c8b4cf3f4b8df2cf7c1d2b9b7a8c8a46d8e2a6e8a4' },
+      { name: 'Orange', category: 'food', tags: ['fruit','citrus'], textureUrl: 'https://textures.minecraft.net/texture/2e2b7f8c6ad3c7a4b1c8d6e0f1a2b3c4d5e6f70890abcdeffedcba0987654321' },
+    ];
 
-            function render() {
-                ctx.drawImage(beerCanvas, 0, 0);
+    async function loadCatalog() {
+      statusEl.textContent = 'Loading catalog…';
+      for (const url of DATASET_URLS) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const json = await res.json();
+          const arr = Array.isArray(json) ? json : (json?.heads || json?.items || []);
+          if (!Array.isArray(arr) || arr.length === 0) throw new Error('Empty dataset');
+          const standardized = arr.map(standardizeRecord).filter(h => h.textureUrl);
+          if (standardized.length === 0) throw new Error('No usable entries');
+          bootstrap(standardized);
+          statusEl.textContent = `Loaded ${standardized.length.toLocaleString()} heads.`;
+          return;
+        } catch (e) {
+          // Try next source
+        }
+      }
+      // Fallback to sample data
+      const fallback = SAMPLE_DATA.map(standardizeRecord);
+      bootstrap(fallback);
+      statusEl.innerHTML = 'Loaded sample data only. <span class="text-amber-300">External dataset blocked or unavailable.</span>';
+    }
 
-                // Draw foam
-                const foamColor1 = '#FFFFFF', foamColor2 = '#fde68a';
-                const baseFoamLine = wrapper.clientHeight * 0.12 + wrapper.clientHeight * 0.025 * 3;
-                for (let y = 0; y < baseFoamLine; y += PIXEL_SCALE) {
-                    for (let x = 0; x < wrapper.clientWidth; x += PIXEL_SCALE) {
-                        if (y < getFoamTop(x)) {
-                            ctx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 3 === 0) ? foamColor2 : foamColor1;
-                            ctx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                        }
-                    }
-                }
+    function bootstrap(list) {
+      state.all = list;
+      const cats = unique(list.map(h => h.category)).sort((a,b) => a.localeCompare(b));
+      state.categories = cats;
+      // Populate categories
+      for (const c of cats) {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        categorySelect.appendChild(opt);
+      }
+      // Initial filter
+      applyFilters();
+      // Setup infinite scroll
+      setupInfiniteScroll();
+    }
 
-                // Draw bubbles
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                bubbles.forEach(b => {
-                    const x = Math.floor(b.x / PIXEL_SCALE) * PIXEL_SCALE, y = Math.floor(b.y / PIXEL_SCALE) * PIXEL_SCALE, r = b.radius / PIXEL_SCALE;
-                    for (let i = -r; i <= r; i++) for (let j = -r; j <= r; j++) if (i*i + j*j <= r*r) ctx.fillRect(x + i*PIXEL_SCALE, y + j*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                    if (r > 1) {
-                         ctx.fillStyle = 'rgba(255, 255, 255, 1)';
-                         ctx.fillRect(x - Math.floor(r/2)*PIXEL_SCALE, y - Math.floor(r/2)*PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE);
-                         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                    }
-                });
+    // ---------------------- Filtering & Rendering ----------------------
+    function applyFilters() {
+      const q = searchInput.value.trim().toLowerCase();
+      const cat = categorySelect.value;
+      const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
 
-                // Draw player and score
-                if (player) ctx.drawImage(player.isBoosting ? player.jump : player.default, player.x, player.y, player.width, player.height);
-                const scoreText = `Time: ${score}s`;
-                ctx.font = '16px "Press Start 2P"';
-                const textWidth = ctx.measureText(scoreText).width;
-                const boxX = (wrapper.clientWidth - textWidth) / 2 - 12;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                ctx.fillRect(boxX, 20, textWidth + 24, 40);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(scoreText, wrapper.clientWidth / 2, 42);
-            }
-
-            function gameLoop(currentTime) {
-                if (gameOver) return;
-                if (lastTime === 0) lastTime = currentTime;
-                accumulator += currentTime - lastTime;
-                lastTime = currentTime;
-                while (accumulator >= timeStep) {
-                    update();
-                    accumulator -= timeStep;
-                }
-                render();
-                animationFrameId = requestAnimationFrame(gameLoop);
-            }
-
-            // --- Event Handlers and UI Management ---
-            function setGameOver() {
-                gameOver = true;
-                stats.totalTime += score;
-                if (score > highScore) {
-                    highScore = score;
-                    stats.longestRun = score;
-                    newHighScoreTextEl.classList.remove('hidden');
-                }
-                saveStats();
-                finalScoreEl.textContent = `${score} seconds`;
-                highScoreEl.textContent = `${highScore} seconds`;
-                showScreen('gameOverScreen');
-            }
-            
-            function showScreen(screenId) {
-                ['startScreen', 'gameOverScreen', 'statsScreen'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (id === screenId) {
-                        el.classList.remove('hidden');
-                        el.classList.add('flex');
-                    } else {
-                        el.classList.add('hidden');
-                        el.classList.remove('flex');
-                    }
-                });
-            }
-
-            function handlePlayerAction(type) {
-                if (!player || gameOver) return;
-                if (type === 'jump') {
-                    player.dy = -GAME_SETTINGS.jumpPower;
-                    player.isDiving = false;
-                    stats.totalJumps++;
-                } else if (type === 'dive') {
-                    if (!player.isDiving) stats.totalDives++;
-                    player.isDiving = true;
-                }
-            }
-
-            function handleKeyDown(e) {
-                if (gameOver && e.code === 'Space') {
-                    startGame();
-                    return;
-                }
-                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
-                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.down = true; handlePlayerAction('dive'); }
-                if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') if (!e.repeat) handlePlayerAction('jump');
-            }
-
-            function handleKeyUp(e) {
-                if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
-                if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
-                if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.down = false; if (player) player.isDiving = false; }
-            }
-
-            function handleTouchStart(e) { e.preventDefault(); touchStartX = e.changedTouches[0].screenX; touchStartY = e.changedTouches[0].screenY; }
-            function handleTouchEnd(e) {
-                e.preventDefault();
-                const deltaY = e.changedTouches[0].screenY - touchStartY;
-                const deltaX = e.changedTouches[0].screenX - touchStartX;
-                if (deltaY > 40 && Math.abs(deltaX) < 50) handlePlayerAction('dive');
-                else if (deltaY < -40 || Math.abs(deltaX) < 20 && Math.abs(deltaY) < 20) handlePlayerAction('jump');
-            }
-
-            function handleOrientation(e) {
-                if (neutralBeta === null && e.beta !== null) neutralBeta = e.beta;
-                if (motionControlsEnabled && player && e.gamma !== null) player.dx = e.gamma * GAME_SETTINGS.tiltSensitivity;
-            }
-
-            function startGame() {
-                showScreen(null); // Hide all screens
-                const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                if (isTouchDevice && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission().then(p => {
-                        motionControlsEnabled = p === 'granted';
-                    }).catch(() => motionControlsEnabled = false);
-                } else {
-                    motionControlsEnabled = isTouchDevice && 'DeviceOrientationEvent' in window;
-                }
-                init();
-            }
-
-            // --- Initial Setup ---
-            function setup() {
-                loadStats();
-                const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-                startTitleEl.textContent = isTouchDevice ? "Hold Device Flat" : "Arrows/WASD to Move";
-                startSubtitleEl.innerHTML = isTouchDevice ? "Tilt to Move<br>Tap to Jump<br>Swipe Down to Dive" : "Space to Jump<br>S/Down to Dive";
-                
-                // Pre-generate sprites
-                const defaultMap = ["W_RBR_W", "WWBBBWW", "WWWBWWW", "_WWBWW_", "__BBB__", "__B_B__", "_______"];
-                const jumpMap = ["__RBR__", "WWBBBWW", "WWWBWWW", "WWWBWWW", "__BBB__", "__B_B__", "_______"];
-                const beerColors = { 'B': '#000000', 'R': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                const redColors = { 'R': '#000000', 'B': '#ff0000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                const blueColors = { 'B': '#0000ff', 'R': '#000000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                const greenColors = { 'B': '#00ff00', 'R': '#000000', 'W': 'rgba(255, 255, 255, 0.7)' };
-                characterSprites.beer.default.src = createPlayerSprite(defaultMap, beerColors);
-                characterSprites.beer.jump.src = createPlayerSprite(jumpMap, beerColors);
-                characterSprites.red.default.src = createPlayerSprite(defaultMap, redColors);
-                characterSprites.red.jump.src = createPlayerSprite(jumpMap, redColors);
-                characterSprites.blue.default.src = createPlayerSprite(defaultMap, blueColors);
-                characterSprites.blue.jump.src = createPlayerSprite(jumpMap, blueColors);
-                characterSprites.green.default.src = createPlayerSprite(defaultMap, greenColors);
-                characterSprites.green.jump.src = createPlayerSprite(jumpMap, greenColors);
-                
-                // Set up event listeners
-                uiContainer.addEventListener('click', e => {
-                    const action = e.target.dataset.action;
-                    if (action === 'start-game' || action === 'retry') startGame();
-                    else if (action === 'main-menu') showScreen('startScreen');
-                    else if (action === 'view-stats') { updateStatsDisplay(); showScreen('statsScreen'); }
-                    else if (action === 'reset-stats') { if (confirm("Reset all stats? This cannot be undone.")) { stats = getDefaultStats(); saveStats(); updateStatsDisplay(); } }
-                });
-                
-                window.addEventListener('keydown', handleKeyDown);
-                window.addEventListener('keyup', handleKeyUp);
-                canvas.addEventListener('touchstart', handleTouchStart);
-                canvas.addEventListener('touchend', handleTouchEnd);
-                window.addEventListener('deviceorientation', handleOrientation);
-                window.addEventListener('resize', () => {
-                    canvas.width = wrapper.clientWidth;
-                    canvas.height = wrapper.clientHeight;
-                    ctx.imageSmoothingEnabled = false;
-                    const bgCtx = beerCanvas.getContext('2d');
-                    bgCtx.imageSmoothingEnabled = false;
-                });
-                
-                // Initial render
-                canvas.width = wrapper.clientWidth;
-                canvas.height = wrapper.clientHeight;
-                beerCanvas = document.createElement('canvas');
-                beerCanvas.width = canvas.width;
-                beerCanvas.height = canvas.height;
-                const bgCtx = beerCanvas.getContext('2d');
-                const beerColor1 = '#FBBF24', beerColor2 = '#F59E0B';
-                 for (let y = 0; y < canvas.height; y += PIXEL_SCALE) {
-                    for (let x = 0; x < canvas.width; x += PIXEL_SCALE) {
-                        bgCtx.fillStyle = ((x / PIXEL_SCALE + y / PIXEL_SCALE) % 2 === 0) ? beerColor1 : beerColor2;
-                        bgCtx.fillRect(x, y, PIXEL_SCALE, PIXEL_SCALE);
-                    }
-                }
-                ctx.drawImage(beerCanvas, 0, 0);
-            }
-
-            setup();
+      let arr = state.all;
+      if (cat && cat !== '__ALL__') arr = arr.filter(h => (h.category || '').toLowerCase() === cat.toLowerCase());
+      if (tokens.length) {
+        arr = arr.filter(h => {
+          const hay = [h.name, h.category, ...(h.tags||[])].join(' ').toLowerCase();
+          return tokens.every(t => hay.includes(t));
         });
-    </script>
+      }
+      state.filtered = arr;
+      state.visibleCount = Math.min(arr.length, state.pageSize);
+      renderGrid();
+      sentinelEl.style.display = state.visibleCount < state.filtered.length ? '' : 'none';
+    }
+
+    function renderGrid() {
+      gridEl.innerHTML = '';
+      const tpl = $('#cardTpl');
+      for (let i = 0; i < state.visibleCount; i++) {
+        const h = state.filtered[i];
+        const frag = tpl.content.cloneNode(true);
+        const card = frag.querySelector('button');
+        const img = frag.querySelector('img');
+        const nameEl = frag.querySelector('.name');
+        const tagsEl = frag.querySelector('.tags');
+        const catEl = frag.querySelector('.category');
+
+        img.src = h.textureUrl; // display ok without CORS
+        img.alt = h.name;
+        nameEl.textContent = h.name;
+        tagsEl.textContent = (h.tags && h.tags.length) ? h.tags.join(', ') : '—';
+        catEl.textContent = h.category || 'misc';
+
+        card.onclick = () => addToCart(h);
+        gridEl.appendChild(frag);
+      }
+    }
+
+    function setupInfiniteScroll() {
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            const more = Math.min(state.filtered.length, state.visibleCount + state.pageSize);
+            if (more > state.visibleCount) {
+              state.visibleCount = more;
+              renderGrid();
+            }
+            sentinelEl.style.display = state.visibleCount < state.filtered.length ? '' : 'none';
+          }
+        }
+      });
+      io.observe(sentinelEl);
+    }
+
+    // ---------------------- Cart ----------------------
+    function addToCart(head) {
+      if (!state.cart.has(head.id)) state.cart.set(head.id, head);
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      state.cart.delete(id);
+      renderCart();
+    }
+
+    function renderCart() {
+      cartList.innerHTML = '';
+      const tpl = $('#cartItemTpl');
+      for (const [id, h] of state.cart) {
+        const frag = tpl.content.cloneNode(true);
+        const img = frag.querySelector('img');
+        const nameEl = frag.querySelector('.name');
+        const metaEl = frag.querySelector('.meta');
+        const btn = frag.querySelector('.remove');
+        img.src = h.textureUrl;
+        img.alt = h.name;
+        nameEl.textContent = h.name;
+        metaEl.textContent = `${h.category}${(h.tags?.length ? ' · ' + h.tags.join(', ') : '')}`;
+        btn.onclick = () => removeFromCart(id);
+        cartList.appendChild(frag);
+      }
+      const count = state.cart.size;
+      cartCount.textContent = String(count);
+      checkoutBtn.disabled = count === 0;
+    }
+
+    // ---------------------- Checkout / ZIP ----------------------
+    function makeFileName(head) {
+      const name = slugify(head.name);
+      const tags = (head.tags && head.tags.length) ? slugify(head.tags.join('-')) : 'no-tags';
+      const cat = slugify(head.category || 'misc');
+      // Ensure something sane
+      const safe = [name || 'head', tags, cat].join('_').replace(/[^a-z0-9_\-]/g, '');
+      return safe + '.png';
+    }
+
+    async function checkout() {
+      checkoutBtn.disabled = true;
+      const original = checkoutBtn.textContent;
+      const zip = new JSZip();
+
+      const items = Array.from(state.cart.values());
+      let ok = 0, fail = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const h = items[i];
+        checkoutBtn.textContent = `Fetching ${i+1}/${items.length}…`;
+        try {
+          const blob = await fetchImageBlobWithFallback(h.textureUrl);
+          const arrayBuf = await blob.arrayBuffer();
+          zip.file(makeFileName(h), arrayBuf);
+          ok++;
+        } catch (e) {
+          fail++;
+        }
+      }
+
+      checkoutBtn.textContent = 'Zipping…';
+      const out = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(out);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `minecraft-heads_${new Date().toISOString().slice(0,10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      checkoutBtn.textContent = original;
+      checkoutBtn.disabled = state.cart.size === 0;
+
+      if (fail) {
+        statusEl.innerHTML = `<span class="text-amber-300">Downloaded ${ok} file(s); ${fail} failed due to CORS or network.</span>`;
+      } else {
+        statusEl.textContent = `Downloaded ${ok} file(s).`;
+      }
+    }
+
+    // ---------------------- Events ----------------------
+    searchInput.addEventListener('input', () => applyFilters());
+    categorySelect.addEventListener('change', () => applyFilters());
+    checkoutBtn.addEventListener('click', checkout);
+    // Keyboard shortcut: Cmd/Ctrl+K focuses search
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); searchInput.focus(); searchInput.select();
+      }
+    });
+
+    // ---------------------- Init ----------------------
+    loadCatalog();
+  </script>
 </body>
 </html>
