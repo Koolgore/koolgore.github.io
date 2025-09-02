@@ -1,372 +1,344 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Minecraft Head Hunter</title>
-  <!-- Tailwind (CDN) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- JSZip (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <style>
-    /* Minimal scrollbars for dense grids */
-    * { scrollbar-width: thin; scrollbar-color: #64748b #0f172a; }
-    ::-webkit-scrollbar { height: 8px; width: 8px; }
-    ::-webkit-scrollbar-thumb { background: #64748b; border-radius: 8px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Head Hunter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        /* Custom scrollbar for a better look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748; /* gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568; /* gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096; /* gray-500 */
+        }
+        /* Style for the head images */
+        .head-img {
+            width: 64px;
+            height: 64px;
+            image-rendering: pixelated;
+            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAD9JREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA70A6QAAEAAEJNhQAAAAASUVORK5CYII=');
+            background-size: cover;
+        }
+        #cart-items .head-img {
+            width: 48px;
+            height: 48px;
+        }
+    </style>
 </head>
-<body class="bg-slate-950 text-slate-100">
-  <div id="app" class="mx-auto max-w-[1400px] min-h-screen grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 p-4">
+<body class="bg-gray-900 text-white font-sans antialiased">
 
-    <!-- MAIN COLUMN -->
-    <div class="flex flex-col gap-4 min-w-0">
-      <!-- Header / Controls -->
-      <header class="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 sticky top-4 z-10 backdrop-blur supports-[backdrop-filter]:bg-slate-900/40">
-        <div class="flex flex-col md:flex-row md:items-end gap-3">
-          <div class="flex-1">
-            <h1 class="text-2xl font-bold tracking-tight">Minecraft Head Hunter</h1>
-            <p id="status" class="text-sm text-slate-400 mt-1">Loading catalog…</p>
-          </div>
-          <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-            <label class="relative flex-1">
-              <input id="searchInput" type="search" placeholder="Search names or tags…" class="w-full h-11 rounded-xl bg-slate-800/70 border border-slate-700 px-4 pr-10 outline-none focus:ring-2 focus:ring-cyan-400/50" />
-              <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">⌘K</span>
-            </label>
-            <select id="categorySelect" class="h-11 rounded-xl bg-slate-800/70 border border-slate-700 px-4 outline-none focus:ring-2 focus:ring-cyan-400/50">
-              <option value="__ALL__">All categories</option>
-            </select>
-          </div>
-        </div>
-      </header>
+    <div id="app" class="flex flex-col md:flex-row h-screen">
 
-      <!-- Grid -->
-      <section class="rounded-2xl bg-slate-900/50 border border-slate-800 p-3">
-        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2"></div>
-        <div id="sentinel" class="py-6 text-center text-slate-400">Loading more…</div>
-      </section>
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
+            <header class="mb-4">
+                <h1 class="text-3xl font-bold text-green-400">Minecraft Head Hunter</h1>
+                <p class="text-gray-400">Browse, select, and download custom head skins.</p>
+            </header>
+
+            <!-- Controls -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <input type="text" id="search-input" placeholder="Search by name or tag..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+                <select id="category-select" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <option value="">Select a Category</option>
+                </select>
+                <button id="all-btn" class="bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-semibold transition-colors">Show All</button>
+                 <a href="https://minecraft-heads.com" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-center rounded-lg px-4 py-2 font-semibold transition-colors">Powered by minecraft-heads.com</a>
+            </div>
+
+            <!-- Heads Grid -->
+            <div id="heads-grid-container" class="flex-1 overflow-y-auto pr-2">
+                 <div id="loader" class="hidden h-full w-full flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500"></div>
+                </div>
+                <div id="heads-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-4">
+                    <!-- Head items will be injected here -->
+                </div>
+                 <p id="no-results" class="hidden text-center text-gray-500 mt-8">No heads found for your query.</p>
+            </div>
+        </main>
+
+        <!-- Cart Sidebar -->
+        <aside class="w-full md:w-80 bg-gray-800 border-l border-gray-700 flex flex-col p-4">
+            <h2 class="text-2xl font-bold mb-4 flex items-center justify-between">
+                Your Cart
+                <span id="cart-count" class="text-lg bg-green-600 rounded-full px-3 py-1">0</span>
+            </h2>
+            <div id="cart-items" class="flex-1 overflow-y-auto space-y-3 pr-2">
+                <!-- Cart items will be injected here -->
+                 <p id="cart-empty" class="text-gray-500 text-center mt-8">Your cart is empty. Click on a head to add it!</p>
+            </div>
+            <button id="checkout-btn" class="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-3 mt-4 font-bold text-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
+                Checkout & Download ZIP
+            </button>
+             <div id="checkout-loader" class="hidden text-center mt-4">
+                <p>Preparing ZIP file... This may take a moment.</p>
+                <p class="text-sm text-gray-400">Fetching and processing skins...</p>
+            </div>
+        </aside>
+
     </div>
 
-    <!-- CART SIDEBAR -->
-    <aside class="rounded-2xl bg-slate-900/60 border border-slate-800 p-4 h-fit sticky top-4">
-      <div class="flex items-center justify-between gap-2">
-        <h2 class="text-lg font-semibold">Cart</h2>
-        <span id="cartCount" class="inline-flex items-center justify-center rounded-full bg-cyan-500/20 text-cyan-300 text-sm px-2 py-1">0</span>
-      </div>
-      <p class="text-xs text-slate-400 mt-1">Click any head to add it to your cart. Remove from the list below.</p>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const searchInput = document.getElementById('search-input');
+            const categorySelect = document.getElementById('category-select');
+            const allBtn = document.getElementById('all-btn');
+            const headsGrid = document.getElementById('heads-grid');
+            const loader = document.getElementById('loader');
+            const noResults = document.getElementById('no-results');
+            const cartItemsContainer = document.getElementById('cart-items');
+            const cartCount = document.getElementById('cart-count');
+            const checkoutBtn = document.getElementById('checkout-btn');
+            const checkoutLoader = document.getElementById('checkout-loader');
+            const cartEmptyMsg = document.getElementById('cart-empty');
+            
+            // --- State ---
+            let cart = [];
+            const API_BASE_URL = 'https://minecraft-heads.com/api/v2';
+           
+            // --- API Functions ---
+            const fetchWithProxy = async (url, retries = 3, delay = 1000) => {
+                // Using a reliable proxy that wraps the response in JSON
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(proxyUrl);
+                        if (!response.ok) {
+                            throw new Error(`Proxy error! status: ${response.status}`);
+                        }
+                        return response; // Return the successful response
+                    } catch (error) {
+                        console.warn(`Attempt ${i + 1} failed for ${url}. Retrying in ${delay}ms...`);
+                        if (i < retries - 1) {
+                            await new Promise(res => setTimeout(res, delay));
+                        } else {
+                            console.error("All retry attempts failed.");
+                            throw error; // Throw error after last attempt
+                        }
+                    }
+                }
+            };
 
-      <ul id="cartList" class="divide-y divide-slate-800 mt-3 max-h-[55vh] overflow-auto"></ul>
+            const fetchFromAPI = async (endpoint) => {
+                loader.classList.remove('hidden');
+                headsGrid.classList.add('hidden');
+                noResults.classList.add('hidden');
+                try {
+                    const apiUrl = `${API_BASE_URL}/${endpoint}`;
+                    const response = await fetchWithProxy(apiUrl);
+                    return await response.json();
+                } catch (error) {
+                    console.error("Failed to fetch from API:", error);
+                    noResults.textContent = 'Error loading heads. Please try again later.';
+                    noResults.classList.remove('hidden');
+                    return [];
+                } finally {
+                    loader.classList.add('hidden');
+                    headsGrid.classList.remove('hidden');
+                }
+            };
 
-      <button id="checkoutBtn" class="w-full mt-4 h-11 rounded-xl bg-cyan-500 text-slate-900 font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cyan-400 transition">
-        Checkout & Download ZIP
-      </button>
-      <p id="checkoutNote" class="text-xs text-slate-400 mt-2">
-        Filenames use <code>name_tags_category.png</code>. You’ll get exactly what’s in the cart, nothing sneaky.
-      </p>
-    </aside>
-  </div>
+            // --- Rendering Functions ---
+            const renderHeads = (heads, categoryName = '') => {
+                headsGrid.innerHTML = '';
+                if (!heads || heads.length === 0) {
+                    noResults.textContent = 'No heads found for your query.';
+                    noResults.classList.remove('hidden');
+                    return;
+                }
+                noResults.classList.add('hidden');
 
-  <template id="cardTpl">
-    <button class="group relative rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-slate-700 p-2 text-left">
-      <img class="h-16 w-16 mx-auto block rounded-md shadow" loading="lazy" />
-      <div class="mt-2">
-        <p class="text-sm font-medium line-clamp-1 name"></p>
-        <p class="text-[10px] text-slate-400 line-clamp-1 tags"></p>
-      </div>
-      <span class="absolute right-2 top-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-700/70 text-slate-200 category"></span>
-      <span class="absolute inset-0 hidden group-hover:flex items-center justify-center bg-black/40 text-xs font-semibold rounded-xl">Add to cart</span>
-    </button>
-  </template>
+                heads.forEach(head => {
+                    if(categoryName) head.category = categoryName;
 
-  <template id="cartItemTpl">
-    <li class="flex items-center gap-3 py-2">
-      <img class="h-10 w-10 rounded" />
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium truncate name"></p>
-        <p class="text-[10px] text-slate-400 truncate meta"></p>
-      </div>
-      <button class="remove text-xs px-2 py-1 rounded bg-slate-800 border border-slate-700 hover:bg-slate-700">Remove</button>
-    </li>
-  </template>
+                    const headWrapper = document.createElement('div');
+                    headWrapper.className = 'group relative cursor-pointer';
+                    headWrapper.title = head.name;
 
-  <script>
-    // ---------------------- Utility ----------------------
-    const $ = (sel, root = document) => root.querySelector(sel);
-    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+                    const img = document.createElement('img');
+                    img.src = `https://minecraft-heads.com/avatar/${head.uuid}/64`;
+                    img.alt = head.name;
+                    img.className = 'head-img rounded-md transition-transform transform group-hover:scale-110 group-hover:shadow-lg';
+                    img.loading = 'lazy';
 
-    const slugify = (s) => (s || "")
-      .toLowerCase()
-      .normalize("NFKD").replace(/[^\w\s-]/g, "")
-      .trim().replace(/\s+/g, "-").replace(/-+/g, "-");
+                    headWrapper.appendChild(img);
+                    headWrapper.addEventListener('click', () => addToCart(head));
+                    headsGrid.appendChild(headWrapper);
+                });
+            };
 
-    const unique = (arr) => Array.from(new Set(arr.filter(Boolean)));
+            const renderCart = () => {
+                cartItemsContainer.innerHTML = '';
+                cartCount.textContent = cart.length;
+                checkoutBtn.disabled = cart.length === 0;
+                cartEmptyMsg.classList.toggle('hidden', cart.length > 0);
 
-    // Try to fetch binary with CORS; if blocked, fall back to a proxy
-    async function fetchImageBlobWithFallback(url) {
-      // First try direct
-      try {
-        const res = await fetch(url, { mode: "cors" });
-        if (res.ok && res.type !== "opaque") return await res.blob();
-      } catch {}
-      // Fallback proxy: images.weserv.nl expects schema-less host in `url=`
-      const proxy = `https://images.weserv.nl/?url=${encodeURIComponent(url.replace(/^https?:\/\//, ""))}`;
-      const proxied = await fetch(proxy);
-      if (!proxied.ok) throw new Error("Image fetch failed");
-      return await proxied.blob();
-    }
+                cart.forEach(item => {
+                    const cartItem = document.createElement('div');
+                    cartItem.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-lg';
+                    cartItem.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <img src="https://minecraft-heads.com/avatar/${item.uuid}/48" alt="${item.name}" class="head-img rounded-md">
+                            <span class="font-semibold truncate" title="${item.name}">${item.name}</span>
+                        </div>
+                        <button class="text-red-400 hover:text-red-600 font-bold text-xl px-2" data-uuid="${item.uuid}" title="Remove">&times;</button>
+                    `;
+                    cartItemsContainer.appendChild(cartItem);
+                });
+            };
+            
+            // --- Cart Logic ---
+            const addToCart = (head) => {
+                if (!cart.some(item => item.uuid === head.uuid)) {
+                    cart.push(head);
+                    renderCart();
+                }
+            };
 
-    // Decode base64 head value -> textures URL, if needed
-    function extractTextureUrlFromValue(valueB64) {
-      try {
-        const json = JSON.parse(atob(valueB64));
-        return json?.textures?.SKIN?.url || null;
-      } catch { return null; }
-    }
+            const removeFromCart = (uuid) => {
+                cart = cart.filter(item => item.uuid !== uuid);
+                renderCart();
+            };
 
-    // Standardize incoming record to our shape
-    function standardizeRecord(raw, idx = 0) {
-      // Attempt to locate fields across common community schemas
-      const name = raw.name || raw.Value?.name || raw.displayName || raw.title || `head-${idx}`;
-      const category = raw.category || raw.categories?.[0] || raw.type || "misc";
-      const tags = unique([...(raw.tags || []), ...(raw.keywords || []), ...(typeof raw.search === 'string' ? raw.search.split(',') : (raw.search || []))])
-        .map(t => String(t).trim()).filter(Boolean);
-      const textureUrl = raw.textureUrl || raw.texture || raw.image?.url || raw.url || extractTextureUrlFromValue(raw.value || raw.base64 || raw.b64 || raw.properties?.value) || null;
-      const texture = textureUrl && textureUrl.startsWith('http') ? textureUrl : (textureUrl ? `https://textures.minecraft.net/texture/${textureUrl}` : null);
-      const id = raw.uuid || raw.id || `${name}:${texture || idx}`;
-      return { id, name, category, tags, textureUrl: texture };
-    }
+            // --- Event Handlers ---
+            const handleSearch = debounce(async () => {
+                const query = searchInput.value.trim();
+                categorySelect.value = '';
+                if (query.length > 2) {
+                    const heads = await fetchFromAPI(`search/${encodeURIComponent(query)}`);
+                    renderHeads(heads);
+                } else if (query.length === 0) {
+                    loadInitialHeads();
+                }
+            }, 300);
 
-    // ---------------------- State ----------------------
-    const state = {
-      all: [],
-      filtered: [],
-      categories: [],
-      visibleCount: 0,
-      pageSize: 160,
-      cart: new Map(), // key: id, value: head
-      loaded: false,
-    };
+            const handleCategoryChange = async () => {
+                const category = categorySelect.value;
+                searchInput.value = '';
+                if (category) {
+                    const heads = await fetchFromAPI(`category/${category}`);
+                    renderHeads(heads, category);
+                }
+            };
+            
+            const handleShowAll = async () => {
+                searchInput.value = '';
+                categorySelect.value = '';
+                loadInitialHeads('all');
+            };
 
-    // ---------------------- DOM Refs ----------------------
-    const statusEl = $('#status');
-    const gridEl = $('#grid');
-    const sentinelEl = $('#sentinel');
-    const searchInput = $('#searchInput');
-    const categorySelect = $('#categorySelect');
-    const cartList = $('#cartList');
-    const cartCount = $('#cartCount');
-    const checkoutBtn = $('#checkoutBtn');
+            // --- Checkout & Download Logic ---
+            const handleCheckout = async () => {
+                if (cart.length === 0) return;
 
-    // ---------------------- Data Loading ----------------------
-    const DATASET_URLS = [
-      // Widely mirrored community dataset (contains many custom heads)
-      'https://raw.githubusercontent.com/InventivetalentDev/minecraft-heads/master/heads.json',
-      // Alternative mirror(s) could be added here
-    ];
+                checkoutBtn.disabled = true;
+                checkoutLoader.classList.remove('hidden');
 
-    const SAMPLE_DATA = [
-      // Minimal sample so UI is testable offline
-      { name: 'Earth Globe', category: 'decoration', tags: ['planet','earth','globe'], textureUrl: 'https://textures.minecraft.net/texture/4b4d8a2d9a7e9d0c3c4c3c8b4cf3f4b8df2cf7c1d2b9b7a8c8a46d8e2a6e8a4' },
-      { name: 'Orange', category: 'food', tags: ['fruit','citrus'], textureUrl: 'https://textures.minecraft.net/texture/2e2b7f8c6ad3c7a4b1c8d6e0f1a2b3c4d5e6f70890abcdeffedcba0987654321' },
-    ];
+                const zip = new JSZip();
 
-    async function loadCatalog() {
-      statusEl.textContent = 'Loading catalog…';
-      for (const url of DATASET_URLS) {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const json = await res.json();
-          const arr = Array.isArray(json) ? json : (json?.heads || json?.items || []);
-          if (!Array.isArray(arr) || arr.length === 0) throw new Error('Empty dataset');
-          const standardized = arr.map(standardizeRecord).filter(h => h.textureUrl);
-          if (standardized.length === 0) throw new Error('No usable entries');
-          bootstrap(standardized);
-          statusEl.textContent = `Loaded ${standardized.length.toLocaleString()} heads.`;
-          return;
-        } catch (e) {
-          // Try next source
-        }
-      }
-      // Fallback to sample data
-      const fallback = SAMPLE_DATA.map(standardizeRecord);
-      bootstrap(fallback);
-      statusEl.innerHTML = 'Loaded sample data only. <span class="text-amber-300">External dataset blocked or unavailable.</span>';
-    }
+                const fetchPromises = cart.map(async (head) => {
+                    try {
+                        const decodedValue = atob(head.value);
+                        const textureData = JSON.parse(decodedValue);
+                        const skinUrl = textureData.textures.SKIN.url;
 
-    function bootstrap(list) {
-      state.all = list;
-      const cats = unique(list.map(h => h.category)).sort((a,b) => a.localeCompare(b));
-      state.categories = cats;
-      // Populate categories
-      for (const c of cats) {
-        const opt = document.createElement('option');
-        opt.value = c; opt.textContent = c;
-        categorySelect.appendChild(opt);
-      }
-      // Initial filter
-      applyFilters();
-      // Setup infinite scroll
-      setupInfiniteScroll();
-    }
+                        const response = await fetchWithProxy(skinUrl);
+                        const blob = await response.blob();
+                        
+                        const name = head.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        const tags = (head.tags || 'notags').replace(/[^a-z0-9,]/gi, '_').replace(/,/g, '-').toLowerCase();
+                        const category = (head.category || 'search').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        const filename = `${name}_${tags}_${category}.png`;
 
-    // ---------------------- Filtering & Rendering ----------------------
-    function applyFilters() {
-      const q = searchInput.value.trim().toLowerCase();
-      const cat = categorySelect.value;
-      const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
+                        zip.file(filename, blob);
+                    } catch (error) {
+                        console.error(`Could not process head: ${head.name}`, error);
+                    }
+                });
+                
+                await Promise.all(fetchPromises);
+                
+                zip.generateAsync({ type: "blob" })
+                    .then(function(content) {
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(content);
+                        link.download = "minecraft-heads.zip";
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        cart = [];
+                        renderCart();
+                    });
 
-      let arr = state.all;
-      if (cat && cat !== '__ALL__') arr = arr.filter(h => (h.category || '').toLowerCase() === cat.toLowerCase());
-      if (tokens.length) {
-        arr = arr.filter(h => {
-          const hay = [h.name, h.category, ...(h.tags||[])].join(' ').toLowerCase();
-          return tokens.every(t => hay.includes(t));
-        });
-      }
-      state.filtered = arr;
-      state.visibleCount = Math.min(arr.length, state.pageSize);
-      renderGrid();
-      sentinelEl.style.display = state.visibleCount < state.filtered.length ? '' : 'none';
-    }
+                checkoutBtn.disabled = false;
+                checkoutLoader.classList.add('hidden');
+            };
 
-    function renderGrid() {
-      gridEl.innerHTML = '';
-      const tpl = $('#cardTpl');
-      for (let i = 0; i < state.visibleCount; i++) {
-        const h = state.filtered[i];
-        const frag = tpl.content.cloneNode(true);
-        const card = frag.querySelector('button');
-        const img = frag.querySelector('img');
-        const nameEl = frag.querySelector('.name');
-        const tagsEl = frag.querySelector('.tags');
-        const catEl = frag.querySelector('.category');
 
-        img.src = h.textureUrl; // display ok without CORS
-        img.alt = h.name;
-        nameEl.textContent = h.name;
-        tagsEl.textContent = (h.tags && h.tags.length) ? h.tags.join(', ') : '—';
-        catEl.textContent = h.category || 'misc';
+            // --- Initialization ---
+            const init = async () => {
+                const categories = await fetchFromAPI('category/all');
+                if(categories) {
+                    categories.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat;
+                        option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' ');
+                        categorySelect.appendChild(option);
+                    });
+                }
+                loadInitialHeads();
+            };
 
-        card.onclick = () => addToCart(h);
-        gridEl.appendChild(frag);
-      }
-    }
-
-    function setupInfiniteScroll() {
-      const io = new IntersectionObserver((entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            const more = Math.min(state.filtered.length, state.visibleCount + state.pageSize);
-            if (more > state.visibleCount) {
-              state.visibleCount = more;
-              renderGrid();
+            const loadInitialHeads = async (type = 'default') => {
+                 let heads = [];
+                if(type === 'all'){
+                    heads = await fetchFromAPI(`category/all`);
+                } else {
+                     heads = await fetchFromAPI('category/decoration');
+                }
+                renderHeads(heads, type === 'all' ? 'all' : 'decoration');
+            };
+            
+            // --- Utility ---
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
             }
-            sentinelEl.style.display = state.visibleCount < state.filtered.length ? '' : 'none';
-          }
-        }
-      });
-      io.observe(sentinelEl);
-    }
 
-    // ---------------------- Cart ----------------------
-    function addToCart(head) {
-      if (!state.cart.has(head.id)) state.cart.set(head.id, head);
-      renderCart();
-    }
+            // --- Event Listeners ---
+            searchInput.addEventListener('input', handleSearch);
+            categorySelect.addEventListener('change', handleCategoryChange);
+            allBtn.addEventListener('click', handleShowAll);
+            checkoutBtn.addEventListener('click', handleCheckout);
+            cartItemsContainer.addEventListener('click', (e) => {
+                if (e.target.matches('button[data-uuid]')) {
+                    removeFromCart(e.target.dataset.uuid);
+                }
+            });
 
-    function removeFromCart(id) {
-      state.cart.delete(id);
-      renderCart();
-    }
-
-    function renderCart() {
-      cartList.innerHTML = '';
-      const tpl = $('#cartItemTpl');
-      for (const [id, h] of state.cart) {
-        const frag = tpl.content.cloneNode(true);
-        const img = frag.querySelector('img');
-        const nameEl = frag.querySelector('.name');
-        const metaEl = frag.querySelector('.meta');
-        const btn = frag.querySelector('.remove');
-        img.src = h.textureUrl;
-        img.alt = h.name;
-        nameEl.textContent = h.name;
-        metaEl.textContent = `${h.category}${(h.tags?.length ? ' · ' + h.tags.join(', ') : '')}`;
-        btn.onclick = () => removeFromCart(id);
-        cartList.appendChild(frag);
-      }
-      const count = state.cart.size;
-      cartCount.textContent = String(count);
-      checkoutBtn.disabled = count === 0;
-    }
-
-    // ---------------------- Checkout / ZIP ----------------------
-    function makeFileName(head) {
-      const name = slugify(head.name);
-      const tags = (head.tags && head.tags.length) ? slugify(head.tags.join('-')) : 'no-tags';
-      const cat = slugify(head.category || 'misc');
-      // Ensure something sane
-      const safe = [name || 'head', tags, cat].join('_').replace(/[^a-z0-9_\-]/g, '');
-      return safe + '.png';
-    }
-
-    async function checkout() {
-      checkoutBtn.disabled = true;
-      const original = checkoutBtn.textContent;
-      const zip = new JSZip();
-
-      const items = Array.from(state.cart.values());
-      let ok = 0, fail = 0;
-
-      for (let i = 0; i < items.length; i++) {
-        const h = items[i];
-        checkoutBtn.textContent = `Fetching ${i+1}/${items.length}…`;
-        try {
-          const blob = await fetchImageBlobWithFallback(h.textureUrl);
-          const arrayBuf = await blob.arrayBuffer();
-          zip.file(makeFileName(h), arrayBuf);
-          ok++;
-        } catch (e) {
-          fail++;
-        }
-      }
-
-      checkoutBtn.textContent = 'Zipping…';
-      const out = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(out);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `minecraft-heads_${new Date().toISOString().slice(0,10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-
-      checkoutBtn.textContent = original;
-      checkoutBtn.disabled = state.cart.size === 0;
-
-      if (fail) {
-        statusEl.innerHTML = `<span class="text-amber-300">Downloaded ${ok} file(s); ${fail} failed due to CORS or network.</span>`;
-      } else {
-        statusEl.textContent = `Downloaded ${ok} file(s).`;
-      }
-    }
-
-    // ---------------------- Events ----------------------
-    searchInput.addEventListener('input', () => applyFilters());
-    categorySelect.addEventListener('change', () => applyFilters());
-    checkoutBtn.addEventListener('click', checkout);
-    // Keyboard shortcut: Cmd/Ctrl+K focuses search
-    window.addEventListener('keydown', (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault(); searchInput.focus(); searchInput.select();
-      }
-    });
-
-    // ---------------------- Init ----------------------
-    loadCatalog();
-  </script>
+            // Start the application
+            init();
+        });
+    </script>
 </body>
 </html>
+
