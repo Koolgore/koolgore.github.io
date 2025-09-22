@@ -81,6 +81,9 @@
       display: none !important;
     }
 
+    /* The game interface relies on the shared .hidden utility class for
+       visibility toggling once a game begins. Keep the default display as
+       flex so removing .hidden reveals the panel immediately. */
     #game-ui {
       display: flex;
       flex-direction: column;
