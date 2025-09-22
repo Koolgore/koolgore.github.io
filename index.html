@@ -1,464 +1,1649 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft Head Hunter</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <style>
-        /* Custom scrollbar for a better look */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #2d3748; /* gray-800 */
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #4a5568; /* gray-600 */
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #718096; /* gray-500 */
-        }
-        /* Style for the head images */
-        .head-img {
-            width: 64px;
-            height: 64px;
-            image-rendering: pixelated;
-            background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAD9JREFUeJztwQEBAAAAgiD/r25IQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA70A6QAAEAAEJNhQAAAAASUVORK5CYII=');
-            background-size: cover;
-        }
-        #cart-items .head-img {
-            width: 48px;
-            height: 48px;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hey Culligan Man</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
 
-        /* --- On-Page Console Styles --- */
-        #on-page-console-container {
-            font-family: 'Courier New', Courier, monospace;
-            background-color: #1a202c; /* gray-900 */
-            border-top: 2px solid #4a5568; /* gray-600 */
-        }
-        #on-page-console pre {
-            white-space: pre-wrap;
-            word-break: break-all;
-            padding: 4px 8px;
-            margin: 0;
-            border-bottom: 1px solid #2d3748; /* gray-800 */
-        }
-        .log-level-log { color: #e2e8f0; /* gray-300 */ }
-        .log-level-warn { color: #f6e05e; /* yellow-400 */ }
-        .log-level-error { color: #f56565; /* red-500 */ }
-        .log-level-info { color: #63b3ed; /* blue-400 */ }
+    * {
+      box-sizing: border-box;
+    }
 
-    </style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-weight: 600;
+    }
+
+    button {
+      cursor: pointer;
+      font: inherit;
+    }
+
+    #main-menu,
+    #game-ui {
+      width: min(960px, 100%);
+      padding: 24px;
+    }
+
+    #main-menu {
+      text-align: center;
+      margin-top: 48px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 16px;
+      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.65);
+    }
+
+    #main-menu p {
+      color: #94a3b8;
+      margin: 16px auto 32px;
+      max-width: 620px;
+      line-height: 1.6;
+    }
+
+    .menu-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .menu-btn {
+      background: linear-gradient(145deg, #22d3ee, #0ea5e9);
+      color: #0f172a;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      font-weight: 600;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .menu-btn:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 30px rgba(14, 165, 233, 0.35);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    #game-ui {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #game-ui.active {
+      display: flex;
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 16px 20px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      backdrop-filter: blur(10px);
+    }
+
+    #turn-indicator {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #38bdf8;
+    }
+
+    .dice-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    #dice-display {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 1.5rem;
+    }
+
+    .die {
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+    }
+
+    .dice-sum {
+      font-size: 1rem;
+      color: #94a3b8;
+    }
+
+    #roll-dice,
+    #skip-shift,
+    .control-btn {
+      background: linear-gradient(145deg, #4ade80, #22c55e);
+      border: none;
+      color: #052e16;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-weight: 600;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    }
+
+    #roll-dice:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+      box-shadow: none;
+    }
+
+    #skip-shift {
+      background: linear-gradient(145deg, #f97316, #ea580c);
+      color: #fff7ed;
+    }
+
+    .control-btn {
+      background: linear-gradient(145deg, #c084fc, #a855f7);
+      color: #fdf4ff;
+    }
+
+    #board-wrapper {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    #board-container {
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      overflow: auto;
+      max-height: 70vh;
+    }
+
+    .board-grid {
+      display: grid;
+      grid-template-rows: repeat(var(--rows), var(--tile-size));
+      grid-template-columns: repeat(var(--cols), var(--tile-size));
+      gap: 8px;
+    }
+
+    .tile-wrapper {
+      width: var(--tile-size);
+      height: var(--tile-size);
+    }
+
+    .tile {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 2px;
+      width: 100%;
+      height: 100%;
+      background: rgba(30, 41, 59, 0.9);
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .tile.empty {
+      border-style: dashed;
+      border-color: rgba(148, 163, 184, 0.25);
+      background: rgba(15, 23, 42, 0.4);
+    }
+
+    .tile.finish {
+      box-shadow: 0 0 0 3px rgba(244, 114, 182, 0.6);
+    }
+
+    .space {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: rgba(71, 85, 105, 0.4);
+    }
+
+    .space.top,
+    .space.bottom,
+    .space.left,
+    .space.right {
+      font-size: 0.75rem;
+      color: rgba(226, 232, 240, 0.7);
+    }
+
+    .tile-num {
+      font-size: 0.6rem;
+      color: #cbd5f5;
+      opacity: 0.75;
+    }
+
+    .soft {
+      background: rgba(22, 163, 74, 0.65);
+    }
+
+    .hard {
+      background: rgba(244, 63, 94, 0.65);
+    }
+
+    .neutral {
+      background: rgba(59, 130, 246, 0.65);
+    }
+
+    .token {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(15, 15, 15, 0.6);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.35);
+    }
+
+    .token.current {
+      box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.75);
+    }
+
+    .selectable {
+      animation: pulse 1.2s ease-in-out infinite;
+      cursor: pointer;
+    }
+
+    .placement {
+      box-shadow: inset 0 0 0 3px rgba(250, 204, 21, 0.75);
+      animation: pulse 1.2s ease-in-out infinite;
+      cursor: pointer;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.65);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(56, 189, 248, 0);
+      }
+    }
+
+    .rotating {
+      animation: spin-90 0.3s ease;
+    }
+
+    .rotating-180 {
+      animation: spin-180 0.3s ease;
+    }
+
+    .rotating-270 {
+      animation: spin-270 0.3s ease;
+    }
+
+    .rotating-full {
+      animation: spin-360 0.3s ease;
+    }
+
+    @keyframes spin-90 {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(90deg);
+      }
+    }
+
+    @keyframes spin-180 {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(180deg);
+      }
+    }
+
+    @keyframes spin-270 {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(270deg);
+      }
+    }
+
+    @keyframes spin-360 {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .action-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      min-height: 220px;
+    }
+
+    #action-text {
+      min-height: 64px;
+      color: #fef3c7;
+      line-height: 1.4;
+    }
+
+    #controls-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(2px);
+      z-index: 10;
+    }
+
+    @media (max-width: 960px) {
+      #board-wrapper {
+        grid-template-columns: 1fr;
+      }
+
+      #board-container {
+        max-height: none;
+      }
+    }
+  </style>
 </head>
-<body class="bg-gray-900 text-white font-sans antialiased">
+<body>
+  <div id="overlay" class="overlay hidden"></div>
+  <section id="main-menu">
+    <h1>Hey Culligan Man</h1>
+    <p>
+      A digital adaptation of the classic "Hey Culligan Man" board game. Choose how many
+      players will compete, optionally add a CPU opponent, and see who can reach the finish first!
+    </p>
+    <div class="menu-grid">
+      <button class="menu-btn" data-players="2" data-cpu="false">2 Players</button>
+      <button class="menu-btn" data-players="3" data-cpu="false">3 Players</button>
+      <button class="menu-btn" data-players="4" data-cpu="false">4 Players</button>
+      <button class="menu-btn" data-players="2" data-cpu="true">1 Player vs CPU</button>
+      <button class="menu-btn" data-players="3" data-cpu="true">2 Players + CPU</button>
+      <button class="menu-btn" data-players="4" data-cpu="true">3 Players + CPU</button>
+    </div>
+  </section>
 
-    <div id="app" class="flex flex-col md:flex-row h-screen">
-
-        <!-- Main Content -->
-        <main class="flex-1 flex flex-col p-4 md:p-6 overflow-hidden">
-            <header class="mb-4">
-                <h1 class="text-3xl font-bold text-green-400">Minecraft Head Hunter</h1>
-                <p class="text-gray-400">Browse, select, and download custom head skins.</p>
-            </header>
-
-            <!-- Controls -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <input type="text" id="search-input" placeholder="Search by name or tag..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
-                <select id="category-select" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-green-500">
-                    <option value="">Select a Category</option>
-                </select>
-                <button id="all-btn" class="bg-green-600 hover:bg-green-700 rounded-lg px-4 py-2 font-semibold transition-colors">Show Featured</button>
-                 <a href="https://minecraft-heads.com" target="_blank" rel="noopener noreferrer" class="bg-blue-600 hover:bg-blue-700 text-center rounded-lg px-4 py-2 font-semibold transition-colors">Powered by minecraft-heads.com</a>
-            </div>
-
-            <!-- Heads Grid -->
-            <div id="heads-grid-container" class="flex-1 overflow-y-auto pr-2">
-                 <div id="loader" class="hidden h-full w-full flex items-center justify-center">
-                    <div class="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-green-500"></div>
-                </div>
-                <div id="heads-grid" class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-4">
-                    <!-- Head items will be injected here -->
-                </div>
-                 <p id="no-results" class="hidden text-center text-gray-500 mt-8">No heads found for your query.</p>
-            </div>
-        </main>
-
-        <!-- Sidebar -->
-        <aside class="w-full md:w-96 bg-gray-800 border-l border-gray-700 flex flex-col">
-            <!-- Cart Section -->
-            <div class="p-4 flex flex-col h-1/2">
-                <h2 class="text-2xl font-bold mb-4 flex items-center justify-between">
-                    Your Cart
-                    <span id="cart-count" class="text-lg bg-green-600 rounded-full px-3 py-1">0</span>
-                </h2>
-                <div id="cart-items" class="flex-1 overflow-y-auto space-y-3 pr-2">
-                    <p id="cart-empty" class="text-gray-500 text-center mt-8">Your cart is empty. Click on a head to add it!</p>
-                </div>
-                <button id="checkout-btn" class="w-full bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-3 mt-4 font-bold text-lg transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    Checkout & Download ZIP
-                </button>
-                <div id="checkout-loader" class="hidden text-center mt-2">
-                    <p class="text-sm">Preparing ZIP file...</p>
-                </div>
-            </div>
-
-            <!-- On-Page Console Section -->
-            <div id="on-page-console-container" class="h-1/2 flex flex-col border-t-2 border-gray-700">
-                <div class="flex items-center justify-between bg-gray-700 p-2">
-                    <h3 class="text-lg font-bold">Live Console</h3>
-                    <button id="clear-console-btn" class="bg-red-600 hover:bg-red-700 text-xs px-2 py-1 rounded">Clear</button>
-                </div>
-                <div id="on-page-console" class="flex-1 overflow-y-auto text-sm p-2">
-                    <!-- Console output will be injected here -->
-                </div>
-            </div>
-        </aside>
-
+  <section id="game-ui" class="hidden">
+    <div class="top-bar">
+      <div id="turn-indicator">Player 1's Turn</div>
+      <div class="dice-area">
+        <button id="roll-dice">Roll Dice</button>
+        <div id="dice-display"></div>
+        <button id="skip-shift" class="hidden">Skip Shift</button>
+      </div>
     </div>
 
-    <script>
-        // --- On-Page Console Logic ---
-        // This MUST run before any other script logic to capture all console logs.
-        (function() {
-            const consoleContainer = document.getElementById('on-page-console');
-            const clearBtn = document.getElementById('clear-console-btn');
-            if (!consoleContainer || !clearBtn) return;
+    <div id="board-wrapper">
+      <div id="board-container"></div>
+      <aside class="action-panel">
+        <h2>Action Log</h2>
+        <div id="action-text"></div>
+        <div id="controls-container"></div>
+      </aside>
+    </div>
+  </section>
 
-            clearBtn.addEventListener('click', () => { consoleContainer.innerHTML = ''; });
+  <script>
+// Hey Culligan Man Game
+// This file implements the complete logic for a playable browser game based on
+// the board game "Hey Culligan Man" (identical to Switchboard). The game
+// supports up to four players with an optional CPU opponent. It implements
+// dynamic board expansion, pathfinding, tile shifting and rotation, bumping
+// mechanics, and a simple CPU strategy.
 
-            function formatMessage(args) {
-                return args.map(arg => {
-                    if (arg instanceof Error) {
-                        return arg.stack;
-                    }
-                    if (typeof arg === 'object' && arg !== null) {
-                        try {
-                            return JSON.stringify(arg, null, 2); // Pretty print objects
-                        } catch (e) {
-                            return '[Unserializable Object]';
-                        }
-                    }
-                    return String(arg);
-                }).join(' '); // Join multiple arguments with a space
+(() => {
+  const TILE_DATA = [
+    { tile_number: "1-1", top: "S", left: "", middle: "N", right: "N", bottom: "H", connections: { top: ["middle"], middle: ["top", "right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "1-2", top: "", left: "", middle: "N", right: "N", bottom: "N", connections: { middle: ["right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "1-3", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "1-4", top: "", left: "S", middle: "S", right: "S", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "1-5", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "1-6", top: "", left: "H", middle: "H", right: "", bottom: "H", connections: { left: ["middle"], middle: ["left", "bottom"], bottom: ["middle"] } },
+    { tile_number: "2-1", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "2-2", top: "S", left: "S", middle: "N", right: "H", bottom: "H", connections: { top: ["middle"], left: ["middle"], middle: ["top", "left", "right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "2-3", top: "", left: "", middle: "N", right: "N", bottom: "N", connections: { middle: ["right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "2-4", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "2-5", top: "", left: "N", middle: "N", right: "", bottom: "N", connections: { left: ["middle"], middle: ["left", "bottom"], bottom: ["middle"] } },
+    { tile_number: "2-6", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "3-1", top: "H", left: "", middle: "H", right: "", bottom: "H", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "3-2", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "3-3", top: "S", left: "S", middle: "N", right: "H", bottom: "H", connections: { top: ["middle"], left: ["middle"], middle: ["top", "left", "right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "3-4", top: "", left: "", middle: "N", right: "", bottom: "N", connections: { middle: ["bottom"], bottom: ["middle"] } },
+    { tile_number: "3-5", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "3-6", top: "S", left: "", middle: "S", right: "", bottom: "S", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "4-1", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "4-2", top: "H", left: "", middle: "H", right: "", bottom: "H", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "4-3", top: "N", left: "", middle: "N", right: "N", bottom: "", connections: { top: ["middle"], middle: ["top", "right"], right: ["middle"] } },
+    { tile_number: "4-4", top: "H", left: "H", middle: "N", right: "S", bottom: "S", connections: { top: ["middle"], left: ["middle"], middle: ["top", "left", "right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "4-5", top: "H", left: "", middle: "H", right: "", bottom: "H", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "4-6", top: "N", left: "", middle: "N", right: "", bottom: "N", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "5-1", top: "S", left: "", middle: "S", right: "", bottom: "S", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "5-2", top: "N", left: "", middle: "N", right: "N", bottom: "", connections: { top: ["middle"], middle: ["top", "right"], right: ["middle"] } },
+    { tile_number: "5-3", top: "", left: "S", middle: "S", right: "S", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "5-4", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "5-5", top: "H", left: "H", middle: "N", right: "S", bottom: "S", connections: { top: ["middle"], left: ["middle"], middle: ["top", "left", "right", "bottom"], right: ["middle"], bottom: ["middle"] } },
+    { tile_number: "5-6", top: "H", left: "", middle: "H", right: "", bottom: "H", connections: { top: ["middle"], middle: ["top", "bottom"], bottom: ["middle"] } },
+    { tile_number: "6-1", top: "N", left: "", middle: "N", right: "N", bottom: "", connections: { top: ["middle"], middle: ["top", "right"], right: ["middle"] } },
+    { tile_number: "6-2", top: "", left: "H", middle: "H", right: "H", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "6-3", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "6-4", top: "", left: "S", middle: "S", right: "S", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "6-5", top: "", left: "N", middle: "N", right: "N", bottom: "", connections: { left: ["middle"], middle: ["left", "right"], right: ["middle"] } },
+    { tile_number: "6-6", top: "H", left: "H", middle: "N", right: "S", bottom: "S", connections: { top: ["middle"], left: ["middle"], middle: ["top", "left", "right", "bottom"], right: ["middle"], bottom: ["middle"] } }
+  ];
+
+  function deepCopy(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function rotateTile(tile) {
+    const rotated = deepCopy(tile);
+    rotated.top = tile.left;
+    rotated.right = tile.top;
+    rotated.bottom = tile.right;
+    rotated.left = tile.bottom;
+    rotated.connections = {};
+    const mapping = { top: "right", right: "bottom", bottom: "left", left: "top", middle: "middle" };
+    for (const [key, arr] of Object.entries(tile.connections)) {
+      const newKey = mapping[key];
+      rotated.connections[newKey] = arr.map((p) => mapping[p]);
+    }
+    rotated.middle = tile.middle;
+    return rotated;
+  }
+
+  function getColourClass(code) {
+    if (code === "S") return "soft";
+    if (code === "H") return "hard";
+    if (code === "N") return "neutral";
+    return "";
+  }
+
+  function distanceToFinish(pos) {
+    return Math.abs(pos.row - finishRow) + Math.abs(pos.col - finishCol);
+  }
+
+  function shortestPathLength(startPos) {
+    const start = startPos ? { row: startPos.row, col: startPos.col, space: startPos.space } : { row: 0, col: 0, space: "middle" };
+    const visited = new Set();
+    const queue = [];
+    queue.push({ pos: start, steps: 0 });
+    visited.add(`${start.row},${start.col},${start.space}`);
+    while (queue.length > 0) {
+      const { pos, steps } = queue.shift();
+      if (pos.row === finishRow && pos.col === finishCol) {
+        return steps;
+      }
+      const neighbors = getNeighbors(pos);
+      neighbors.forEach((n) => {
+        const key = `${n.row},${n.col},${n.space}`;
+        if (!visited.has(key)) {
+          visited.add(key);
+          queue.push({ pos: n, steps: steps + 1 });
+        }
+      });
+    }
+    return Infinity;
+  }
+
+  let boardState = new Map();
+  let finishRow = 2;
+  let finishCol = 3;
+  let players = [];
+  let currentPlayerIndex = 0;
+  let diceRoll = [0, 0];
+  let gamePhase = "INIT";
+  let awaitingPaths = [];
+  let highlightedCells = [];
+  let highlightedTiles = [];
+  let placementCandidates = [];
+  let tileInHand = null;
+  let removedCoord = null;
+  let availableRotations = [];
+  let rotationIndex = 0;
+  let bumpVictim = null;
+
+  const CPU_DELAY = 1000;
+
+  const PLAYER_COLOURS = [
+    "#f56565",
+    "#4299e1",
+    "#f6ad55",
+    "#9f7aea"
+  ];
+
+  const menuDiv = document.getElementById("main-menu");
+  const gameUI = document.getElementById("game-ui");
+  const boardContainer = document.getElementById("board-container");
+  const turnIndicator = document.getElementById("turn-indicator");
+  const rollBtn = document.getElementById("roll-dice");
+  const diceDisplay = document.getElementById("dice-display");
+  const skipShiftBtn = document.getElementById("skip-shift");
+  const actionText = document.getElementById("action-text");
+  const controlsContainer = document.getElementById("controls-container");
+  const overlay = document.getElementById("overlay");
+
+  function clearTempControls() {
+    const btns = controlsContainer.querySelectorAll('.temp-btn');
+    btns.forEach((btn) => btn.remove());
+  }
+
+  function initBoard() {
+    boardState.clear();
+    for (const tile of TILE_DATA) {
+      const parts = tile.tile_number.split("-");
+      const row = parseInt(parts[0], 10) - 1;
+      const col = parseInt(parts[1], 10) - 1;
+      boardState.set(`${row},${col}`, deepCopy(tile));
+    }
+    finishRow = 2;
+    finishCol = 3;
+  }
+
+  function initPlayers(count, cpu) {
+    players = [];
+    for (let i = 0; i < count; i++) {
+      players.push({
+        id: i + 1,
+        name: `Player ${i + 1}`,
+        colour: PLAYER_COLOURS[i % PLAYER_COLOURS.length],
+        pos: null,
+        isCPU: cpu && i === count - 1,
+        missNextTurn: false,
+      });
+    }
+  }
+
+  function renderBoard() {
+    let rows = [];
+    let cols = [];
+    boardState.forEach((_, key) => {
+      const [r, c] = key.split(",").map((x) => parseInt(x, 10));
+      rows.push(r);
+      cols.push(c);
+    });
+    const minR = Math.min(...rows);
+    const maxR = Math.max(...rows);
+    const minC = Math.min(...cols);
+    const maxC = Math.max(...cols);
+    const extMinR = minR - 1;
+    const extMaxR = maxR + 1;
+    const extMinC = minC - 1;
+    const extMaxC = maxC + 1;
+    const numRows = extMaxR - extMinR + 1;
+    const numCols = extMaxC - extMinC + 1;
+    const tileSize = 70;
+    boardContainer.innerHTML = "";
+    const grid = document.createElement("div");
+    grid.classList.add("board-grid");
+    grid.style.setProperty("--rows", numRows);
+    grid.style.setProperty("--cols", numCols);
+    grid.style.setProperty("--tile-size", `${tileSize}px`);
+    for (let r = extMinR; r <= extMaxR; r++) {
+      for (let c = extMinC; c <= extMaxC; c++) {
+        const cell = document.createElement("div");
+        cell.classList.add("tile-wrapper");
+        const key = `${r},${c}`;
+        if (boardState.has(key)) {
+          const tile = boardState.get(key);
+          const tileEl = renderTile(tile, r, c);
+          cell.appendChild(tileEl);
+        } else {
+          const emptyTile = document.createElement("div");
+          emptyTile.classList.add("tile", "empty");
+          emptyTile.dataset.row = r;
+          emptyTile.dataset.col = c;
+          cell.appendChild(emptyTile);
+        }
+        grid.appendChild(cell);
+      }
+    }
+    boardContainer.appendChild(grid);
+    renderTokens();
+  }
+
+  function renderTile(tile, row, col) {
+    const el = document.createElement("div");
+    el.classList.add("tile");
+    el.dataset.row = row;
+    el.dataset.col = col;
+    const positions = [
+      "corner-tl", "top", "corner-tr",
+      "left", "middle", "right",
+      "corner-bl", "bottom", "corner-br",
+    ];
+    positions.forEach((pos) => {
+      const cell = document.createElement("div");
+      cell.classList.add("space");
+      if (!pos.startsWith("corner")) {
+        cell.classList.add(pos);
+        cell.dataset.space = pos;
+      } else {
+        cell.classList.add(pos);
+      }
+      if (pos === "top") {
+        const cls = getColourClass(tile.top);
+        if (cls) cell.classList.add(cls);
+      }
+      if (pos === "left") {
+        const cls = getColourClass(tile.left);
+        if (cls) cell.classList.add(cls);
+      }
+      if (pos === "right") {
+        const cls = getColourClass(tile.right);
+        if (cls) cell.classList.add(cls);
+      }
+      if (pos === "bottom") {
+        const cls = getColourClass(tile.bottom);
+        if (cls) cell.classList.add(cls);
+      }
+      if (pos === "middle") {
+        const cls = getColourClass(tile.middle);
+        if (cls) cell.classList.add(cls);
+      }
+      if (pos === "corner-br") {
+        const label = document.createElement("span");
+        label.classList.add("tile-num");
+        label.textContent = tile.tile_number;
+        cell.appendChild(label);
+      }
+      el.appendChild(cell);
+    });
+    if (row === finishRow && col === finishCol) {
+      el.classList.add("finish");
+    }
+    return el;
+  }
+
+  function renderTokens() {
+    document.querySelectorAll(".token").forEach((tok) => tok.remove());
+    players.forEach((player, index) => {
+      if (player.pos) {
+        const { row, col, space } = player.pos;
+        const selector = `.tile[data-row='${row}'][data-col='${col}'] .${space}`;
+        const cellEl = document.querySelector(selector);
+        if (cellEl) {
+          const tok = document.createElement("div");
+          tok.classList.add("token");
+          if (index === currentPlayerIndex) {
+            tok.classList.add("current");
+          }
+          tok.style.backgroundColor = player.colour;
+          cellEl.appendChild(tok);
+        }
+      }
+    });
+  }
+
+  function clearHighlights() {
+    highlightedCells.forEach((cell) => {
+      cell.classList.remove("selectable");
+      if (cell._moveHandler) {
+        cell.removeEventListener("click", cell._moveHandler);
+        delete cell._moveHandler;
+      }
+    });
+    highlightedCells = [];
+    highlightedTiles.forEach((tile) => {
+      tile.classList.remove("selectable");
+      if (tile._shiftHandler) {
+        tile.removeEventListener("click", tile._shiftHandler);
+        delete tile._shiftHandler;
+      }
+      if (tile._rotateHandler) {
+        tile.removeEventListener("click", tile._rotateHandler);
+        delete tile._rotateHandler;
+      }
+    });
+    highlightedTiles = [];
+    placementCandidates.forEach((tile) => {
+      tile.classList.remove("placement");
+      if (tile._placeHandler) {
+        tile.removeEventListener("click", tile._placeHandler);
+        delete tile._placeHandler;
+      }
+    });
+    placementCandidates = [];
+  }
+
+  function findPaths(startPos, steps) {
+    const paths = [];
+    let startNodes = [];
+    if (startPos === null) {
+      const start = { row: 0, col: 0, space: "middle" };
+      startNodes = [ { pos: start, visited: new Set([`0,0,middle`]) } ];
+    } else {
+      startNodes = [ { pos: startPos, visited: new Set([`${startPos.row},${startPos.col},${startPos.space}`]) } ];
+    }
+    function dfs(node, remaining, path) {
+      const { pos, visited } = node;
+      if (remaining === 0) {
+        paths.push([...path, pos]);
+        return;
+      }
+      const neighbors = getNeighbors(pos);
+      neighbors.forEach((n) => {
+        const key = `${n.row},${n.col},${n.space}`;
+        if (!visited.has(key)) {
+          const newVisited = new Set(visited);
+          newVisited.add(key);
+          dfs({ pos: n, visited: newVisited }, remaining - 1, [...path, pos]);
+        }
+      });
+    }
+    startNodes.forEach((node) => {
+      dfs(node, steps, []);
+    });
+    return paths;
+  }
+  function getNeighbors(pos) {
+    const list = [];
+    const tile = boardState.get(`${pos.row},${pos.col}`);
+    if (!tile) return list;
+    const adjWithin = tile.connections[pos.space] || [];
+    adjWithin.forEach((target) => {
+      if (tile[pos.space] && tile[target]) {
+        list.push({ row: pos.row, col: pos.col, space: target });
+      }
+    });
+    if (pos.space === "top" && tile.top) {
+      const key = `${pos.row - 1},${pos.col}`;
+      if (boardState.has(key)) {
+        const neighborTile = boardState.get(key);
+        if (neighborTile.bottom) {
+          list.push({ row: pos.row - 1, col: pos.col, space: "bottom" });
+        }
+      }
+    }
+    if (pos.space === "bottom" && tile.bottom) {
+      const key = `${pos.row + 1},${pos.col}`;
+      if (boardState.has(key)) {
+        const neighborTile = boardState.get(key);
+        if (neighborTile.top) {
+          list.push({ row: pos.row + 1, col: pos.col, space: "top" });
+        }
+      }
+    }
+    if (pos.space === "left" && tile.left) {
+      const key = `${pos.row},${pos.col - 1}`;
+      if (boardState.has(key)) {
+        const neighborTile = boardState.get(key);
+        if (neighborTile.right) {
+          list.push({ row: pos.row, col: pos.col - 1, space: "right" });
+        }
+      }
+    }
+    if (pos.space === "right" && tile.right) {
+      const key = `${pos.row},${pos.col + 1}`;
+      if (boardState.has(key)) {
+        const neighborTile = boardState.get(key);
+        if (neighborTile.left) {
+          list.push({ row: pos.row, col: pos.col + 1, space: "left" });
+        }
+      }
+    }
+    return list;
+  }
+
+  function computeValidMoves(diceTotal) {
+    clearHighlights();
+    const player = players[currentPlayerIndex];
+    const startPos = player.pos;
+    let steps = diceTotal;
+    if (startPos === null) {
+      steps = diceTotal - 1;
+    }
+    awaitingPaths = findPaths(startPos, steps);
+    if (awaitingPaths.length === 0) {
+      actionText.textContent = "No valid moves. You may still shift a tile.";
+      gamePhase = "AWAITING_SHIFT";
+      showShiftOptions(diceRoll);
+      return;
+    }
+    const finalMap = new Map();
+    awaitingPaths.forEach((path) => {
+      const end = path[path.length - 1];
+      const key = `${end.row},${end.col},${end.space}`;
+      if (!finalMap.has(key)) {
+        finalMap.set(key, path);
+      }
+    });
+    if (player.isCPU) {
+      let bestPath = null;
+      let bestDist = Infinity;
+      finalMap.forEach((path) => {
+        const end = path[path.length - 1];
+        const dist = shortestPathLength(end);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestPath = path;
+        }
+      });
+      if (bestPath) {
+        actionText.textContent = `${player.name} is moving the token...`;
+        setTimeout(() => {
+          handleMove(bestPath);
+        }, CPU_DELAY);
+      } else {
+        actionText.textContent = `${player.name} has no valid moves.`;
+        gamePhase = "AWAITING_SHIFT";
+        showShiftOptions(diceRoll);
+      }
+    } else {
+      finalMap.forEach((path, key) => {
+        const [r, c, space] = key.split(",");
+        const cellSelector = `.tile[data-row='${r}'][data-col='${c}'] .${space}`;
+        const cellEl = document.querySelector(cellSelector);
+        if (cellEl) {
+          cellEl.classList.add("selectable");
+          const handler = () => {
+            handleMove(path);
+          };
+          cellEl._moveHandler = handler;
+          cellEl.addEventListener("click", handler, { once: true });
+          highlightedCells.push(cellEl);
+        }
+      });
+      actionText.textContent = "Select a destination to move.";
+    }
+  }
+
+  function handleMove(path) {
+    clearHighlights();
+    const player = players[currentPlayerIndex];
+    const endPos = path[path.length - 1];
+    player.pos = { row: endPos.row, col: endPos.col, space: endPos.space };
+    renderBoard();
+    const victimIndex = players.findIndex((p, idx) => idx !== currentPlayerIndex && p.pos && p.pos.row === endPos.row && p.pos.col === endPos.col && p.pos.space === endPos.space);
+    if (victimIndex !== -1) {
+      bumpVictim = victimIndex;
+      gamePhase = "AWAITING_BUMP";
+      handleBump();
+      return;
+    }
+    if (endPos.row === finishRow && endPos.col === finishCol) {
+      declareWinner(player);
+      return;
+    }
+    const tile = boardState.get(`${endPos.row},${endPos.col}`);
+    const colour = tile[endPos.space];
+    if (colour === "S") {
+      actionText.textContent = `${player.name} landed on Soft water! Take another turn after shifting.`;
+    } else if (colour === "H") {
+      player.missNextTurn = true;
+      actionText.textContent = `${player.name} landed on Hard water and will miss their next turn.`;
+    } else {
+      actionText.textContent = ``;
+    }
+    gamePhase = "AWAITING_SHIFT";
+    showShiftOptions(diceRoll);
+  }
+
+  function handleBump() {
+    clearHighlights();
+    const bumper = players[currentPlayerIndex];
+    const victim = players[bumpVictim];
+    const neutralPositions = [];
+    boardState.forEach((tile, key) => {
+      const [r, c] = key.split(",").map((x) => parseInt(x, 10));
+      ["top", "left", "middle", "right", "bottom"].forEach((space) => {
+        if (tile[space] === "N") {
+          neutralPositions.push({ row: r, col: c, space });
+        }
+      });
+    });
+    if (neutralPositions.length === 0) {
+      bumpVictim = null;
+      gamePhase = "AWAITING_SHIFT";
+      showShiftOptions(diceRoll);
+      return;
+    }
+    if (bumper.isCPU) {
+      let bestPos = null;
+      let bestScore = -Infinity;
+      neutralPositions.forEach((pos) => {
+        const dist = shortestPathLength(pos);
+        const score = dist === Infinity ? 9999 : dist;
+        if (score > bestScore) {
+          bestScore = score;
+          bestPos = pos;
+        }
+      });
+      actionText.textContent = `${bumper.name} bumped ${victim.name} and is relocating them...`;
+      setTimeout(() => {
+        executeBump(bestPos);
+      }, CPU_DELAY);
+    } else {
+      neutralPositions.forEach((pos) => {
+        const selector = `.tile[data-row='${pos.row}'][data-col='${pos.col}'] .${pos.space}`;
+        const cellEl = document.querySelector(selector);
+        if (cellEl) {
+          cellEl.classList.add("selectable");
+          const handler = () => {
+            executeBump(pos);
+          };
+          cellEl.dataset.moveHandler = handler;
+          cellEl.addEventListener("click", handler, { once: true });
+          highlightedCells.push(cellEl);
+        }
+      });
+      actionText.textContent = `${bumper.name} bumped ${victim.name}! Choose where to relocate them (neutral spaces only).`;
+    }
+  }
+
+  function executeBump(newPos) {
+    clearHighlights();
+    const bumper = players[currentPlayerIndex];
+    const victim = players[bumpVictim];
+    victim.pos = { row: newPos.row, col: newPos.col, space: newPos.space };
+    renderBoard();
+    const tileKey = `${newPos.row},${newPos.col}`;
+    let victimTile = boardState.get(tileKey);
+    const rotations = [];
+    let rotatedTile = deepCopy(victimTile);
+    for (let i = 0; i < 4; i++) {
+      if (i > 0) rotatedTile = rotateTile(rotatedTile);
+      const neighboursValid = isRotationValid(rotatedTile, newPos.row, newPos.col);
+      if (neighboursValid) {
+        rotations.push(deepCopy(rotatedTile));
+      }
+    }
+    if (rotations.length === 0) {
+      bumpVictim = null;
+      gamePhase = "AWAITING_SHIFT";
+      showShiftOptions(diceRoll);
+      return;
+    }
+    if (bumper.isCPU) {
+      let bestRot = rotations[0];
+      let worstDist = -Infinity;
+      const originalTile = boardState.get(tileKey);
+      rotations.forEach((rot) => {
+        boardState.set(tileKey, rot);
+        const dist = shortestPathLength(victim.pos);
+        if (dist > worstDist) {
+          worstDist = dist;
+          bestRot = rot;
+        }
+      });
+      boardState.set(tileKey, originalTile);
+      actionText.textContent = `${bumper.name} is rotating the tile...`;
+      setTimeout(() => {
+        const original = boardState.get(tileKey);
+        let diffSteps = 0;
+        if (original) {
+          let temp = deepCopy(original);
+          for (let d = 0; d < 4; d++) {
+            if (JSON.stringify(temp.connections) === JSON.stringify(bestRot.connections) && temp.top === bestRot.top && temp.right === bestRot.right && temp.bottom === bestRot.bottom && temp.left === bestRot.left && temp.middle === bestRot.middle) {
+              diffSteps = d;
+              break;
             }
-
-            function logToPage(level, ...args) {
-                const message = formatMessage(args);
-                const logEntry = document.createElement('pre');
-                logEntry.className = `log-level-${level}`;
-                logEntry.textContent = `[${new Date().toLocaleTimeString()}] [${level.toUpperCase()}] ${message}`;
-                consoleContainer.appendChild(logEntry);
-                // Auto-scroll to the bottom
-                consoleContainer.scrollTop = consoleContainer.scrollHeight;
+            temp = rotateTile(temp);
+          }
+        }
+        boardState.set(tileKey, bestRot);
+        if (diffSteps > 0) {
+          players.forEach((pl) => {
+            if (pl.pos && pl.pos.row === newPos.row && pl.pos.col === newPos.col) {
+              const order = ["top", "right", "bottom", "left"];
+              if (pl.pos.space !== "middle") {
+                let idx = order.indexOf(pl.pos.space);
+                if (idx >= 0) {
+                  idx = (idx + diffSteps) % 4;
+                  pl.pos.space = order[idx];
+                }
+              }
             }
-
-            // Save original console methods
-            const originalConsole = {
-                log: console.log,
-                warn: console.warn,
-                error: console.error,
-                info: console.info,
-            };
-
-            // Override console methods
-            console.log = function(...args) {
-                originalConsole.log.apply(console, args);
-                logToPage('log', ...args);
-            };
-            console.warn = function(...args) {
-                originalConsole.warn.apply(console, args);
-                logToPage('warn', ...args);
-            };
-            console.error = function(...args) {
-                originalConsole.error.apply(console, args);
-                logToPage('error', ...args);
-            };
-             console.info = function(...args) {
-                originalConsole.info.apply(console, args);
-                logToPage('info', ...args);
-            };
-        })();
-
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // --- DOM Elements ---
-            const searchInput = document.getElementById('search-input');
-            const categorySelect = document.getElementById('category-select');
-            const allBtn = document.getElementById('all-btn');
-            const headsGrid = document.getElementById('heads-grid');
-            const loader = document.getElementById('loader');
-            const noResults = document.getElementById('no-results');
-            const cartItemsContainer = document.getElementById('cart-items');
-            const cartCount = document.getElementById('cart-count');
-            const checkoutBtn = document.getElementById('checkout-btn');
-            const checkoutLoader = document.getElementById('checkout-loader');
-            const cartEmptyMsg = document.getElementById('cart-empty');
-            
-            // --- State ---
-            let cart = [];
-            const API_BASE_URL = 'https://minecraft-heads.com/api/v2';
-           
-            // --- API Functions ---
-            const fetchWithProxy = async (url, retries = 3, delay = 1000) => {
-                // FIX: Switched to a different, more reliable proxy to avoid security page blocks.
-                const proxyUrl = `https://thingproxy.freeboard.io/fetch/${url}`;
-                for (let i = 0; i < retries; i++) {
-                    try {
-                        console.info(`Attempt ${i + 1} to fetch via new proxy: ${url.substring(0, 100)}...`);
-                        const response = await fetch(proxyUrl);
-                        if (!response.ok) throw new Error(`Proxy error! status: ${response.status} ${response.statusText}`);
-                        return response;
-                    } catch (error) {
-                        console.warn(`Attempt ${i + 1} failed. Retrying in ${delay}ms...`);
-                        if (i < retries - 1) {
-                            await new Promise(res => setTimeout(res, delay));
-                        } else {
-                            console.error("All retry attempts failed for URL:", url);
-                            throw error;
-                        }
-                    }
-                }
-            };
-
-            const fetchFromAPI = async (endpoint) => {
-                loader.classList.remove('hidden');
-                headsGrid.classList.add('hidden');
-                noResults.classList.add('hidden');
-                try {
-                    const apiUrl = `${API_BASE_URL}/${endpoint}`;
-                    const response = await fetchWithProxy(apiUrl);
-
-                    const contentType = response.headers.get("content-type");
-                    if (contentType && contentType.includes("application/json")) {
-                        const data = await response.json();
-                        console.log(`Successfully fetched and parsed JSON from /${endpoint}`);
-                        return data;
-                    } else {
-                        const responseText = await response.text();
-                        throw new Error(`Invalid content type from proxy. Expected JSON, but got ${contentType}. Response: ${responseText.substring(0, 100)}...`);
-                    }
-                } catch (error) {
-                    console.error("Failed to fetch from API. The proxy or the API might be down.", error);
-                    noResults.textContent = 'Error loading heads. Please try again later.';
-                    noResults.classList.remove('hidden');
-                    return [];
-                } finally {
-                    loader.classList.add('hidden');
-                    headsGrid.classList.remove('hidden');
-                }
-            };
-
-            // --- Rendering Functions ---
-            const renderHeads = (heads, categoryName = '') => {
-                headsGrid.innerHTML = '';
-                if (!Array.isArray(heads) || heads.length === 0) {
-                    noResults.textContent = 'No heads found for your query.';
-                    noResults.classList.remove('hidden');
-                    return;
-                }
-                noResults.classList.add('hidden');
-
-                heads.forEach(head => {
-                    if (typeof head !== 'object' || head === null) {
-                        console.warn("Invalid item in heads array:", head);
-                        return;
-                    }
-                    if (categoryName) head.category = categoryName;
-
-                    const headWrapper = document.createElement('div');
-                    headWrapper.className = 'group relative cursor-pointer';
-                    headWrapper.title = head.name;
-
-                    const img = document.createElement('img');
-                    img.src = `https://minecraft-heads.com/avatar/${head.uuid}/64`;
-                    img.alt = head.name;
-                    img.className = 'head-img rounded-md transition-transform transform group-hover:scale-110 group-hover:shadow-lg';
-                    img.loading = 'lazy';
-
-                    headWrapper.appendChild(img);
-                    headWrapper.addEventListener('click', () => addToCart(head));
-                    headsGrid.appendChild(headWrapper);
-                });
-            };
-
-            const renderCart = () => {
-                cartItemsContainer.innerHTML = '';
-                cartCount.textContent = cart.length;
-                checkoutBtn.disabled = cart.length === 0;
-                
-                if (cart.length > 0) {
-                     cartEmptyMsg.classList.add('hidden');
-                     cart.forEach(item => {
-                        const cartItem = document.createElement('div');
-                        cartItem.className = 'flex items-center justify-between bg-gray-700 p-2 rounded-lg';
-                        cartItem.innerHTML = `
-                            <div class="flex items-center gap-3">
-                                <img src="https://minecraft-heads.com/avatar/${item.uuid}/48" alt="${item.name}" class="head-img rounded-md">
-                                <span class="font-semibold truncate" title="${item.name}">${item.name}</span>
-                            </div>
-                            <button class="text-red-400 hover:text-red-600 font-bold text-xl px-2" data-uuid="${item.uuid}" title="Remove">&times;</button>
-                        `;
-                        cartItemsContainer.appendChild(cartItem);
-                    });
-                } else {
-                    cartItemsContainer.appendChild(cartEmptyMsg);
-                    cartEmptyMsg.classList.remove('hidden');
-                }
-            };
-            
-            // --- Cart Logic ---
-            const addToCart = (head) => {
-                if (!cart.some(item => item.uuid === head.uuid)) {
-                    console.log("Adding to cart:", head);
-                    cart.push(head);
-                    renderCart();
-                } else {
-                    console.warn("Item already in cart:", head.name);
-                }
-            };
-
-            const removeFromCart = (uuid) => {
-                cart = cart.filter(item => item.uuid !== uuid);
-                renderCart();
-            };
-
-            // --- Event Handlers ---
-            const handleSearch = debounce(async () => {
-                const query = searchInput.value.trim();
-                categorySelect.value = '';
-                if (query.length > 2) {
-                    const heads = await fetchFromAPI(`search/${encodeURIComponent(query)}`);
-                    renderHeads(heads, 'search-result');
-                } else if (query.length === 0) {
-                    loadInitialHeads();
-                }
-            }, 300);
-
-            const handleCategoryChange = async () => {
-                const category = categorySelect.value;
-                if (!category) return;
-                searchInput.value = '';
-                const heads = await fetchFromAPI(`category/${category}`);
-                renderHeads(heads, category);
-            };
-            
-            const handleShowFeatured = async () => {
-                searchInput.value = '';
-                categorySelect.value = '';
-                loadInitialHeads('featured');
-            };
-
-            // --- Checkout & Download Logic ---
-            const handleCheckout = async () => {
-                if (cart.length === 0) return;
-
-                checkoutBtn.disabled = true;
-                checkoutLoader.classList.remove('hidden');
-                console.log("Starting checkout for", cart.length, "items.");
-
-                const zip = new JSZip();
-                
-                const fetchPromises = cart.map(async (head) => {
-                    try {
-                        if (!head.value) {
-                           throw new Error(`Head object for "${head.name}" is missing 'value' property.`);
-                        }
-                        const decodedValue = atob(head.value);
-                        const textureData = JSON.parse(decodedValue);
-                        const skinUrl = textureData.textures.SKIN.url;
-
-                        const response = await fetchWithProxy(skinUrl);
-                        
-                        const contentType = response.headers.get('content-type');
-                        if (!contentType || !contentType.startsWith('image/')) {
-                            throw new Error(`Expected an image blob for ${head.name}, but got ${contentType}`);
-                        }
-
-                        const blob = await response.blob();
-                        
-                        const name = (head.name || 'untitled').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                        const category = (head.category || 'unsorted').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                        const filename = `${category}/${name}_${head.uuid.substring(0,8)}.png`;
-
-                        console.info(`Adding to ZIP: ${filename}`);
-                        zip.file(filename, blob);
-                    } catch (error) {
-                        console.error(`Could not process head: ${head.name} (UUID: ${head.uuid})`, error);
-                    }
-                });
-                
-                await Promise.all(fetchPromises);
-                
-                try {
-                    const content = await zip.generateAsync({ type: "blob" });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(content);
-                    link.download = "minecraft-heads.zip";
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    // Clear cart on successful download
-                    cart = [];
-                    renderCart();
-                } catch (zipError) {
-                    console.error("Error generating ZIP file:", zipError);
-                } finally {
-                    checkoutBtn.disabled = cart.length !== 0; 
-                    checkoutLoader.classList.add('hidden');
-                }
-            };
-
-            // --- Initialization ---
-            const init = async () => {
-                const categories = await fetchFromAPI('category/all');
-                if (Array.isArray(categories)) {
-                    categories.sort().forEach(cat => {
-                        const option = document.createElement('option');
-                        option.value = cat;
-                        option.textContent = cat.charAt(0).toUpperCase() + cat.slice(1).replace(/_/g, ' ');
-                        categorySelect.appendChild(option);
-                    });
-                }
-                loadInitialHeads();
-            };
-
-            const loadInitialHeads = async (type = 'decoration') => {
-                 let heads = await fetchFromAPI(`category/${type}`);
-                 renderHeads(heads, type);
-            };
-            
-            // --- Utility ---
-            function debounce(func, wait) {
-                let timeout;
-                return function executedFunction(...args) {
-                    const later = () => {
-                        clearTimeout(timeout);
-                        func(...args);
-                    };
-                    clearTimeout(timeout);
-                    timeout = setTimeout(later, wait);
-                };
+          });
+        }
+        renderBoard();
+        bumpVictim = null;
+        gamePhase = "AWAITING_SHIFT";
+        showShiftOptions(diceRoll);
+      }, CPU_DELAY);
+    } else {
+      actionText.textContent = `${bumper.name}, rotate ${victim.name}'s new tile to finish bump (click tile to rotate, then confirm).`;
+      availableRotations = rotations;
+      rotationIndex = 0;
+      boardState.set(tileKey, rotations[rotationIndex]);
+      renderBoard();
+      const tileEl = document.querySelector(`.tile[data-row='${newPos.row}'][data-col='${newPos.col}']`);
+      if (tileEl) {
+        tileEl.classList.add("selectable");
+        highlightedTiles.push(tileEl);
+        const cycleHandler = () => {
+          tileEl.classList.add("rotating");
+          setTimeout(() => {
+            const prevRot = availableRotations[rotationIndex];
+            rotationIndex = (rotationIndex + 1) % availableRotations.length;
+            const nextRot = availableRotations[rotationIndex];
+            let diffSteps = 0;
+            let temp = deepCopy(prevRot);
+            for (let d = 1; d <= 4; d++) {
+              temp = rotateTile(temp);
+              if (JSON.stringify(temp.connections) === JSON.stringify(nextRot.connections) && temp.top === nextRot.top && temp.right === nextRot.right && temp.bottom === nextRot.bottom && temp.left === nextRot.left && temp.middle === nextRot.middle) {
+                diffSteps = d;
+                break;
+              }
             }
-
-            // --- Event Listeners ---
-            searchInput.addEventListener('input', handleSearch);
-            categorySelect.addEventListener('change', handleCategoryChange);
-            allBtn.addEventListener('click', handleShowFeatured);
-            checkoutBtn.addEventListener('click', handleCheckout);
-            cartItemsContainer.addEventListener('click', (e) => {
-                if (e.target.matches('button[data-uuid]')) {
-                    removeFromCart(e.target.dataset.uuid);
+            boardState.set(tileKey, nextRot);
+            if (diffSteps > 0) {
+              players.forEach((pl) => {
+                if (pl.pos && pl.pos.row === newPos.row && pl.pos.col === newPos.col) {
+                  const order = ["top", "right", "bottom", "left"];
+                  if (pl.pos.space !== "middle") {
+                    let idx = order.indexOf(pl.pos.space);
+                    if (idx >= 0) {
+                      idx = (idx + diffSteps) % 4;
+                      pl.pos.space = order[idx];
+                    }
+                  }
                 }
-            });
+              });
+            }
+            renderBoard();
+            const newTile = document.querySelector(`.tile[data-row='${newPos.row}'][data-col='${newPos.col}']`);
+            if (newTile) {
+              newTile.classList.add("selectable");
+              highlightedTiles.push(newTile);
+              newTile._rotateHandler = cycleHandler;
+              newTile.addEventListener("click", cycleHandler, { once: false });
+            }
+          }, 300);
+        };
+        tileEl._rotateHandler = cycleHandler;
+        tileEl.addEventListener("click", cycleHandler, { once: false });
+      }
+      clearTempControls();
+      const confirmBtn = document.createElement("button");
+      confirmBtn.textContent = "Confirm Rotation";
+      confirmBtn.className = "control-btn temp-btn";
+      confirmBtn.addEventListener("click", () => {
+        clearHighlights();
+        bumpVictim = null;
+        clearTempControls();
+        gamePhase = "AWAITING_SHIFT";
+        showShiftOptions(diceRoll);
+      });
+      controlsContainer.appendChild(confirmBtn);
+    }
+  }
+  function isRotationValid(tile, row, col) {
+    const dirs = [
+      { dr: -1, dc: 0, side: "top", opp: "bottom" },
+      { dr: 1, dc: 0, side: "bottom", opp: "top" },
+      { dr: 0, dc: -1, side: "left", opp: "right" },
+      { dr: 0, dc: 1, side: "right", opp: "left" },
+    ];
+    for (const dir of dirs) {
+      const nr = row + dir.dr;
+      const nc = col + dir.dc;
+      const neighbour = boardState.get(`${nr},${nc}`);
+      if (neighbour) {
+        if (tile[dir.side] && neighbour[dir.opp]) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
-            // Start the application
-            init();
+  function showShiftOptions(dice) {
+    clearHighlights();
+    const player = players[currentPlayerIndex];
+    const x = dice[0];
+    const y = dice[1];
+    const choices = new Set([`${x}-${y}`, `${y}-${x}`]);
+    const selectableTiles = [];
+    boardState.forEach((tile, key) => {
+      if (choices.has(tile.tile_number)) {
+        const [r, c] = key.split(",").map((n) => parseInt(n, 10));
+        const hasPlayer = players.some((p) => p.pos && p.pos.row === r && p.pos.col === c);
+        if (!hasPlayer) {
+          selectableTiles.push({ row: r, col: c });
+        }
+      }
+    });
+    skipShiftBtn.classList.add("hidden");
+    skipShiftBtn.onclick = null;
+    if (selectableTiles.length === 0) {
+      if (player.isCPU) {
+        endTurn();
+      } else {
+        actionText.textContent = "No tiles available to shift. You may skip.";
+        skipShiftBtn.classList.remove("hidden");
+        skipShiftBtn.onclick = () => {
+          skipShiftBtn.classList.add("hidden");
+          actionText.textContent = "";
+          endTurn();
+        };
+      }
+      return;
+    }
+    if (player.isCPU) {
+      const best = chooseBestShift(player, selectableTiles);
+      if (!best) {
+        const curDist = shortestPathLength(player.pos);
+        if (curDist === Infinity) {
+          const target = selectableTiles[0];
+          const tile = boardState.get(`${target.row},${target.col}`);
+          const tileLabel = tile ? tile.tile_number : `${target.row + 1}-${target.col + 1}`;
+          actionText.textContent = `${player.name} is shifting tile ${tileLabel}...`;
+          setTimeout(() => {
+            performShift(target.row, target.col);
+          }, CPU_DELAY);
+          return;
+        }
+        actionText.textContent = `${player.name} chooses not to shift.`;
+        setTimeout(() => {
+          endTurn();
+        }, CPU_DELAY);
+        return;
+      }
+      const target = best;
+      const tile = boardState.get(`${target.row},${target.col}`);
+      const tileLabel = tile ? tile.tile_number : `${target.row + 1}-${target.col + 1}`;
+      actionText.textContent = `${player.name} is shifting tile ${tileLabel}...`;
+      setTimeout(() => {
+        performShift(target.row, target.col);
+      }, CPU_DELAY);
+    } else {
+      actionText.textContent = "You may shift a tile. Select one or skip.";
+      skipShiftBtn.classList.remove("hidden");
+      skipShiftBtn.onclick = () => {
+        skipShiftBtn.classList.add("hidden");
+        actionText.textContent = "";
+        endTurn();
+      };
+      selectableTiles.forEach((coord) => {
+        const tileEl = document.querySelector(
+          `.tile[data-row='${coord.row}'][data-col='${coord.col}']`
+        );
+        if (tileEl) {
+          tileEl.classList.add("selectable");
+          const handler = () => {
+            performShift(coord.row, coord.col);
+          };
+          tileEl._shiftHandler = handler;
+          tileEl.addEventListener("click", handler, { once: true });
+          highlightedTiles.push(tileEl);
+        }
+      });
+    }
+  }
+
+  function chooseBestShift(cpuPlayer, options) {
+    let bestCoord = null;
+    let bestScore = -Infinity;
+    const cpuOldDist = shortestPathLength(cpuPlayer.pos);
+    const humanOldDists = [];
+    players.forEach((p) => {
+      if (!p.isCPU) {
+        humanOldDists.push(shortestPathLength(p.pos));
+      }
+    });
+    options.forEach((coord) => {
+      const key = `${coord.row},${coord.col}`;
+      const simulatedTile = boardState.get(key);
+      boardState.delete(key);
+      const positions = computePlacementCandidates(coord.row, coord.col, simulatedTile);
+      positions.forEach((pos) => {
+        let rotated = deepCopy(simulatedTile);
+        for (let i = 0; i < 4; i++) {
+          if (i > 0) rotated = rotateTile(rotated);
+          if (!isRotationValid(rotated, pos.row, pos.col)) continue;
+          const placeKey = `${pos.row},${pos.col}`;
+          boardState.set(placeKey, deepCopy(rotated));
+          const cpuNewDist = shortestPathLength(cpuPlayer.pos);
+          let deltaCpu;
+          if (cpuOldDist === Infinity && cpuNewDist === Infinity) {
+            deltaCpu = 0;
+          } else if (cpuOldDist === Infinity && cpuNewDist !== Infinity) {
+            deltaCpu = 50;
+          } else if (cpuOldDist !== Infinity && cpuNewDist === Infinity) {
+            deltaCpu = -50;
+          } else {
+            deltaCpu = cpuOldDist - cpuNewDist;
+          }
+          let deltaOpp = 0;
+          let idxOpp = 0;
+          players.forEach((p) => {
+            if (!p.isCPU) {
+              const oldDist = humanOldDists[idxOpp++];
+              const newDist = shortestPathLength(p.pos);
+              let diff;
+              if (oldDist === Infinity && newDist === Infinity) {
+                diff = 0;
+              } else if (oldDist === Infinity && newDist !== Infinity) {
+                diff = -50;
+              } else if (oldDist !== Infinity && newDist === Infinity) {
+                diff = 50;
+              } else {
+                diff = newDist - oldDist;
+              }
+              deltaOpp += diff;
+            }
+          });
+          const score = deltaCpu + deltaOpp;
+          if (score > bestScore) {
+            bestScore = score;
+            bestCoord = { row: coord.row, col: coord.col };
+          }
+          boardState.delete(placeKey);
+        }
+      });
+      boardState.set(key, simulatedTile);
+    });
+    if (bestScore <= 0 || !bestCoord) return null;
+    return { row: bestCoord.row, col: bestCoord.col };
+  }
+
+  function computePlacementCandidates(removedRow, removedCol, tile) {
+    const positions = [];
+    const considered = new Set();
+    boardState.forEach((_, key) => {
+      const [r, c] = key.split(",").map((x) => parseInt(x, 10));
+      const neighbors = [
+        { row: r - 1, col: c },
+        { row: r + 1, col: c },
+        { row: r, col: c - 1 },
+        { row: r, col: c + 1 },
+      ];
+      neighbors.forEach((n) => {
+        const key2 = `${n.row},${n.col}`;
+        if (!boardState.has(key2) && !(n.row === removedRow && n.col === removedCol)) {
+          considered.add(key2);
+        }
+      });
+    });
+    considered.forEach((key) => {
+      const [r, c] = key.split(",").map((x) => parseInt(x, 10));
+      let rotated = deepCopy(tile);
+      for (let i = 0; i < 4; i++) {
+        if (i > 0) rotated = rotateTile(rotated);
+        if (isRotationValid(rotated, r, c)) {
+          positions.push({ row: r, col: c, tile: deepCopy(rotated) });
+          break;
+        }
+      }
+    });
+    return positions;
+  }
+
+  function simulateMoveAfterPlacement(cpuPlayer, row, col, tile) {
+    const key = `${row},${col}`;
+    boardState.set(key, tile);
+    const pos = cpuPlayer.pos;
+    boardState.delete(key);
+    return pos;
+  }
+  function performShift(row, col) {
+    clearHighlights();
+    skipShiftBtn.classList.add("hidden");
+    const key = `${row},${col}`;
+    tileInHand = boardState.get(key);
+    removedCoord = { row, col };
+    boardState.delete(key);
+    renderBoard();
+    const candidates = [];
+    const considered = new Set();
+    boardState.forEach((_, key2) => {
+      const [r, c] = key2.split(",").map((x) => parseInt(x, 10));
+      const neighbors = [
+        { row: r - 1, col: c },
+        { row: r + 1, col: c },
+        { row: r, col: c - 1 },
+        { row: r, col: c + 1 },
+      ];
+      neighbors.forEach((n) => {
+        const keyn = `${n.row},${n.col}`;
+        if (!boardState.has(keyn) && !(n.row === removedCoord.row && n.col === removedCoord.col)) {
+          considered.add(keyn);
+        }
+      });
+    });
+    considered.forEach((keyn) => {
+      const [r, c] = keyn.split(",").map((x) => parseInt(x, 10));
+      let rot = deepCopy(tileInHand);
+      const rotations = [];
+      for (let i = 0; i < 4; i++) {
+        if (i > 0) rot = rotateTile(rot);
+        if (isRotationValid(rot, r, c)) {
+          rotations.push({ tile: deepCopy(rot), step: i });
+        }
+      }
+      if (rotations.length > 0) {
+        candidates.push({ row: r, col: c, rotations, allowRotation: true });
+      }
+    });
+    if (tileInHand && removedCoord) {
+      const origCandidate = {
+        row: removedCoord.row,
+        col: removedCoord.col,
+        rotations: [ { tile: deepCopy(tileInHand), step: 0 } ],
+        allowRotation: false,
+      };
+      candidates.unshift(origCandidate);
+    }
+    if (candidates.length === 0) {
+      boardState.set(`${removedCoord.row},${removedCoord.col}`, tileInHand);
+      if (tileInHand && tileInHand.tile_number === "3-4") {
+        finishRow = removedCoord.row;
+        finishCol = removedCoord.col;
+      }
+      tileInHand = null;
+      removedCoord = null;
+      renderBoard();
+      endTurn();
+      return;
+    }
+    const currentPlayer = players[currentPlayerIndex];
+    if (currentPlayer.isCPU) {
+      let bestCand = null;
+      let bestRotIndex = 0;
+      let bestScore = -Infinity;
+      const cpuOldDist = shortestPathLength(currentPlayer.pos);
+      const humanOldDists = [];
+      players.forEach((p) => {
+        if (!p.isCPU) {
+          humanOldDists.push(shortestPathLength(p.pos));
+        }
+      });
+      candidates.forEach((cand) => {
+        cand.rotations.forEach((rotObj, rotIndex) => {
+          const key2 = `${cand.row},${cand.col}`;
+          boardState.set(key2, deepCopy(rotObj.tile));
+          const cpuNewDist = shortestPathLength(currentPlayer.pos);
+          let deltaCpu;
+          if (cpuOldDist === Infinity && cpuNewDist === Infinity) {
+            deltaCpu = 0;
+          } else if (cpuOldDist === Infinity && cpuNewDist !== Infinity) {
+            deltaCpu = 50;
+          } else if (cpuOldDist !== Infinity && cpuNewDist === Infinity) {
+            deltaCpu = -50;
+          } else {
+            deltaCpu = cpuOldDist - cpuNewDist;
+          }
+          let deltaOpp = 0;
+          let idx = 0;
+          players.forEach((p) => {
+            if (!p.isCPU) {
+              const oldDist = humanOldDists[idx++];
+              const newDist = shortestPathLength(p.pos);
+              let diff;
+              if (oldDist === Infinity && newDist === Infinity) {
+                diff = 0;
+              } else if (oldDist === Infinity && newDist !== Infinity) {
+                diff = -50;
+              } else if (oldDist !== Infinity && newDist === Infinity) {
+                diff = 50;
+              } else {
+                diff = newDist - oldDist;
+              }
+              deltaOpp += diff;
+            }
+          });
+          const score = deltaCpu + deltaOpp;
+          if (score > bestScore) {
+            bestScore = score;
+            bestCand = cand;
+            bestRotIndex = rotIndex;
+          }
+          boardState.delete(key2);
         });
-    </script>
+      });
+      if (!bestCand || bestScore <= 0) {
+        actionText.textContent = `${currentPlayer.name} chooses not to shift and returns the tile to its original spot.`;
+        boardState.set(`${removedCoord.row},${removedCoord.col}`, deepCopy(tileInHand));
+        if (tileInHand && tileInHand.tile_number === "3-4") {
+          finishRow = removedCoord.row;
+          finishCol = removedCoord.col;
+        }
+        tileInHand = null;
+        removedCoord = null;
+        renderBoard();
+        setTimeout(() => {
+          endTurn();
+        }, CPU_DELAY);
+      } else {
+        actionText.textContent = `${currentPlayer.name} is placing the tile...`;
+        boardState.set(`${bestCand.row},${bestCand.col}`, deepCopy(bestCand.rotations[bestRotIndex].tile));
+        if (tileInHand && tileInHand.tile_number === "3-4") {
+          finishRow = bestCand.row;
+          finishCol = bestCand.col;
+        }
+        tileInHand = null;
+        removedCoord = null;
+        renderBoard();
+        setTimeout(() => {
+          endTurn();
+        }, CPU_DELAY);
+      }
+    } else {
+      actionText.textContent = "Place the picked-up tile on an empty space (yellow).";
+      candidates.forEach((cand) => {
+        const tileEl = document.querySelector(
+          `.tile[data-row='${cand.row}'][data-col='${cand.col}']`
+        );
+        if (tileEl) {
+          tileEl.classList.add("placement");
+          const handler = () => {
+            placeTileAt(cand);
+          };
+          tileEl._placeHandler = handler;
+          tileEl.addEventListener("click", handler, { once: true });
+          placementCandidates.push(tileEl);
+        }
+      });
+    }
+  }
+
+  function placeTileAt(cand) {
+    clearHighlights();
+    rotationIndex = 0;
+    availableRotations = cand.rotations;
+    boardState.set(`${cand.row},${cand.col}`, deepCopy(availableRotations[rotationIndex].tile));
+    if (tileInHand && tileInHand.tile_number === "3-4") {
+      finishRow = cand.row;
+      finishCol = cand.col;
+    }
+    tileInHand = null;
+    removedCoord = null;
+    renderBoard();
+    const tileEl = document.querySelector(`.tile[data-row='${cand.row}'][data-col='${cand.col}']`);
+    if (tileEl) {
+      tileEl.classList.add("selectable");
+      highlightedTiles.push(tileEl);
+      if (cand.allowRotation !== false) {
+        const rotateHandler = () => {
+          if (availableRotations.length === 0) return;
+          const currentStep = availableRotations[rotationIndex].step;
+          const nextIndex = (rotationIndex + 1) % availableRotations.length;
+          const nextStep = availableRotations[nextIndex].step;
+          let diffSteps = (nextStep - currentStep + 4) % 4;
+          if (diffSteps === 0) diffSteps = 4;
+          let animClass;
+          if (diffSteps === 1) {
+            animClass = "rotating";
+          } else if (diffSteps === 2) {
+            animClass = "rotating-180";
+          } else if (diffSteps === 3) {
+            animClass = "rotating-270";
+          } else {
+            animClass = "rotating-full";
+          }
+          tileEl.classList.add(animClass);
+          setTimeout(() => {
+            rotationIndex = nextIndex;
+            boardState.set(`${cand.row},${cand.col}`, deepCopy(availableRotations[rotationIndex].tile));
+            renderBoard();
+            const newTile = document.querySelector(`.tile[data-row='${cand.row}'][data-col='${cand.col}']`);
+            if (newTile) {
+              newTile.classList.add("selectable");
+              highlightedTiles.push(newTile);
+              newTile._rotateHandler = rotateHandler;
+              newTile.addEventListener("click", rotateHandler, { once: false });
+            }
+          }, 300);
+        };
+        tileEl._rotateHandler = rotateHandler;
+        tileEl.addEventListener("click", rotateHandler, { once: false });
+      }
+    }
+    if (cand.allowRotation !== false && availableRotations.length > 1) {
+      actionText.textContent = "Click the placed tile to rotate, then confirm placement.";
+    } else {
+      actionText.textContent = "Confirm placement.";
+    }
+    clearTempControls();
+    const confirmBtn = document.createElement("button");
+    confirmBtn.textContent = "Confirm Placement";
+    confirmBtn.className = "control-btn temp-btn";
+    confirmBtn.addEventListener("click", () => {
+      clearHighlights();
+      clearTempControls();
+      endTurn();
+    });
+    controlsContainer.appendChild(confirmBtn);
+  }
+
+  function endTurn() {
+    if (gamePhase === "GAME_OVER") return;
+    const player = players[currentPlayerIndex];
+    const tile = boardState.get(`${player.pos.row},${player.pos.col}`);
+    const colour = tile[player.pos.space];
+    if (colour === "S") {
+      actionText.textContent = `${player.name} takes another turn.`;
+    } else {
+      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+    }
+    let loops = 0;
+    while (players[currentPlayerIndex].missNextTurn && loops < players.length) {
+      players[currentPlayerIndex].missNextTurn = false;
+      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      loops++;
+    }
+    renderBoard();
+    actionText.textContent = "";
+    clearTempControls();
+    diceDisplay.textContent = "";
+    rollBtn.disabled = false;
+    skipShiftBtn.classList.add("hidden");
+    updateTurnIndicator();
+    gamePhase = "AWAITING_ROLL";
+    const nextPlayer = players[currentPlayerIndex];
+    if (nextPlayer.isCPU) {
+      setTimeout(() => rollDice(), 500);
+    }
+  }
+
+  function updateTurnIndicator() {
+    const player = players[currentPlayerIndex];
+    turnIndicator.textContent = `${player.name}'s Turn${player.isCPU ? " (CPU)" : ""}`;
+  }
+
+  function rollDice() {
+    if (gamePhase !== "AWAITING_ROLL") return;
+    rollBtn.disabled = true;
+    const player = players[currentPlayerIndex];
+    if (player.isCPU) {
+      actionText.textContent = `${player.name} is rolling the dice...`;
+      setTimeout(() => {
+        const die1 = Math.floor(Math.random() * 6) + 1;
+        const die2 = Math.floor(Math.random() * 6) + 1;
+        diceRoll = [die1, die2];
+        const diceChars = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+        diceDisplay.innerHTML = `
+          <span class="die">${diceChars[die1 - 1]}</span>
+          <span class="die">${diceChars[die2 - 1]}</span>
+          <span class="dice-sum">= ${die1 + die2}</span>
+        `;
+        actionText.textContent = `${player.name} rolled ${die1} and ${die2}.`;
+        gamePhase = "AWAITING_MOVE";
+        setTimeout(() => {
+          computeValidMoves(die1 + die2);
+        }, CPU_DELAY);
+      }, CPU_DELAY);
+    } else {
+      const die1 = Math.floor(Math.random() * 6) + 1;
+      const die2 = Math.floor(Math.random() * 6) + 1;
+      diceRoll = [die1, die2];
+      const diceChars = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+      diceDisplay.innerHTML = `
+        <span class="die">${diceChars[die1 - 1]}</span>
+        <span class="die">${diceChars[die2 - 1]}</span>
+        <span class="dice-sum">= ${die1 + die2}</span>
+      `;
+      gamePhase = "AWAITING_MOVE";
+      computeValidMoves(die1 + die2);
+    }
+  }
+
+  function declareWinner(player) {
+    gamePhase = "GAME_OVER";
+    clearHighlights();
+    actionText.textContent = `${player.name} wins! Congratulations!`;
+    rollBtn.disabled = true;
+    skipShiftBtn.classList.add("hidden");
+    clearTempControls();
+  }
+
+  function startGame(playerCount, cpu) {
+    initBoard();
+    initPlayers(playerCount, cpu);
+    currentPlayerIndex = 0;
+    gamePhase = "AWAITING_ROLL";
+    actionText.textContent = "";
+    diceDisplay.textContent = "";
+    skipShiftBtn.classList.add("hidden");
+    clearTempControls();
+    renderBoard();
+    updateTurnIndicator();
+    menuDiv.classList.add("hidden");
+    gameUI.classList.remove("hidden");
+    rollBtn.disabled = false;
+    if (players[0].isCPU) {
+      setTimeout(() => rollDice(), 500);
+    }
+  }
+
+  document.querySelectorAll(".menu-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pcount = parseInt(btn.dataset.players, 10);
+      const cpu = btn.dataset.cpu === "true";
+      startGame(pcount, cpu);
+    });
+  });
+
+  rollBtn.addEventListener("click", rollDice);
+})();
+  </script>
 </body>
 </html>
-
