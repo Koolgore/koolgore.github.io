@@ -1,0 +1,20 @@
+{
+  "name": "face-anonymizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ffmpeg/ffmpeg": "0.12.6",
+    "@ffmpeg/util": "0.12.1",
+    "onnxruntime-web": "1.18.0"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "vite": "5.2.8"
+  }
+}
