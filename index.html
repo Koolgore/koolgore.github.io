@@ -3,59 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hey Culligan Man</title>
+  <title>Face Mosaic Anonymizer</title>
   <link rel="stylesheet" href="style.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0"></script>
+  <script defer src="script.js"></script>
 </head>
 <body>
-  <div id="menu" class="menu-overlay">
-    <div class="menu-card">
-      <h1>Hey Culligan Man</h1>
-      <p>Select a game mode to begin.</p>
-      <div class="menu-buttons">
-        <button data-players="1">1 Player</button>
-        <button data-players="2">2 Players</button>
-        <button data-players="3">3 Players</button>
-        <button data-players="4">4 Players</button>
-        <button data-mode="cpu">Play vs CPU</button>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <h1>Face Mosaic Anonymizer</h1>
+        <p>Upload a video, tune the anonymization controls, and automatically apply a face-tracked mosaic to every frame.</p>
       </div>
-    </div>
-  </div>
+    </header>
 
-  <main id="game" class="game hidden">
-    <div class="board-wrapper">
-      <div id="board-background"></div>
-      <div id="board"></div>
-      <div id="placement-layer"></div>
-    </div>
-    <aside class="side-panel">
-      <section class="announcer">
-        <h2>Announcer</h2>
-        <div id="announcer-log" class="announcer-log"></div>
-        <div id="dice-display" class="dice-display">
-          <span class="die">⚀</span>
-          <span class="die">⚀</span>
-          <span class="sum">= 2</span>
+    <main class="content">
+      <section class="controls-panel">
+        <h2>1. Upload video</h2>
+        <label class="file-input">
+          <span>Select a video file</span>
+          <input type="file" id="video-upload" accept="video/*" />
+        </label>
+        <p class="hint">All processing happens in your browser. Longer clips may take a while to process.</p>
+
+        <h2>2. Adjust settings</h2>
+        <div class="control-group">
+          <label for="mosaic-scale">Mosaic scale <span id="mosaic-scale-value">24</span></label>
+          <input type="range" id="mosaic-scale" min="6" max="80" step="2" value="24" />
+          <p class="hint">Higher values create larger blocks for a stronger mosaic effect.</p>
+        </div>
+        <div class="control-group">
+          <label for="mask-expansion">Mask expansion (px) <span id="mask-expansion-value">32</span></label>
+          <input type="range" id="mask-expansion" min="0" max="120" step="4" value="32" />
+          <p class="hint">Expand each detected face box to ensure complete coverage.</p>
+        </div>
+        <div class="control-group">
+          <label for="detection-threshold">Tracking sensitivity <span id="detection-threshold-value">0.75</span></label>
+          <input type="range" id="detection-threshold" min="0.3" max="0.95" step="0.01" value="0.75" />
+          <p class="hint">Lower the threshold if faces are missed. Raise it to avoid false positives.</p>
+        </div>
+
+        <button id="process-btn" class="primary" disabled>Start anonymizing</button>
+        <p id="status" class="status">Loading face detection model…</p>
+      </section>
+
+      <section class="preview-panel">
+        <h2>Preview</h2>
+        <div class="video-stage">
+          <video id="input-video" class="input-video" controls playsinline></video>
+          <canvas id="output-canvas" class="output-canvas"></canvas>
+        </div>
+        <div id="progress" class="progress hidden">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+          </div>
+          <span id="progress-text">0%</span>
+        </div>
+        <div id="result" class="result hidden">
+          <h3>Processed video</h3>
+          <video id="processed-video" controls loop playsinline></video>
+          <a id="download-link" class="download" download="anonymized.mp4">Download anonymized video</a>
         </div>
       </section>
-      <section class="controls">
-        <h2>Controls</h2>
-        <div class="control-buttons">
-          <button id="roll-btn">Roll Dice</button>
-          <button id="confirm-placement" class="hidden">Confirm Placement</button>
-          <button id="skip-shift" class="hidden">Skip Shift</button>
-        </div>
-      </section>
-    </aside>
-  </main>
-
-  <div id="victory-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2 id="victory-title">Winner!</h2>
-      <p id="victory-message"></p>
-      <button id="restart-btn">Return to Menu</button>
-    </div>
+    </main>
   </div>
-
-  <script src="script.js"></script>
 </body>
 </html>
