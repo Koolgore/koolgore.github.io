@@ -1,46 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Glitch Art Video Lab</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <header class="app-header">
-      <h1>Glitch Art Video Lab</h1>
-      <p class="tagline">Drag a video or use the picker to start experimenting.</p>
-    </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hey Culligan Man</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="menu" class="menu-overlay">
+    <div class="menu-card">
+      <h1>Hey Culligan Man</h1>
+      <p>Select a game mode to begin.</p>
+      <div class="menu-buttons">
+        <button data-players="1">1 Player</button>
+        <button data-players="2">2 Players</button>
+        <button data-players="3">3 Players</button>
+        <button data-players="4">4 Players</button>
+        <button data-mode="cpu">Play vs CPU</button>
+      </div>
+    </div>
+  </div>
 
-    <main class="app-main">
-      <section class="control-panel">
-        <div class="file-controls">
-          <label class="file-picker">
-            <input id="file-input" type="file" accept="video/mp4,video/webm,image/gif" />
-            <span>Load Video</span>
-          </label>
-          <button id="export-btn" class="primary" disabled>Export Video</button>
+  <main id="game" class="game hidden">
+    <div class="board-wrapper">
+      <div id="board-background"></div>
+      <div id="board"></div>
+      <div id="placement-layer"></div>
+    </div>
+    <aside class="side-panel">
+      <section class="announcer">
+        <h2>Announcer</h2>
+        <div id="announcer-log" class="announcer-log"></div>
+        <div id="dice-display" class="dice-display">
+          <span class="die">⚀</span>
+          <span class="die">⚀</span>
+          <span class="sum">= 2</span>
         </div>
-
-        <div id="effect-controls" class="effects"></div>
       </section>
-
-      <section class="preview-panel">
-        <div id="drop-zone" class="drop-zone">
-          <video id="source-video" crossorigin="anonymous" playsinline hidden></video>
-          <canvas id="output-canvas" width="640" height="360"></canvas>
-          <p class="drop-hint">Drop a video file here</p>
+      <section class="controls">
+        <h2>Controls</h2>
+        <div class="control-buttons">
+          <button id="roll-btn">Roll Dice</button>
+          <button id="confirm-placement" class="hidden">Confirm Placement</button>
+          <button id="skip-shift" class="hidden">Skip Shift</button>
         </div>
       </section>
-    </main>
+    </aside>
+  </main>
 
-    <footer class="app-footer">
-      <p>
-        Built with vanilla HTML, CSS, and JavaScript. All processing happens in your
-        browser — no uploads required.
-      </p>
-    </footer>
+  <div id="victory-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="victory-title">Winner!</h2>
+      <p id="victory-message"></p>
+      <button id="restart-btn">Return to Menu</button>
+    </div>
+  </div>
 
-    <script type="module" src="script.js"></script>
-  </body>
+  <script src="script.js"></script>
+</body>
 </html>
