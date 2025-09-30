@@ -6,13 +6,49 @@ import type { AnonymizationMode, Detection } from './types';
 
 const CORE_VERSION = '0.12.6';
 const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core`;
-const CORE_MT_BASE = `https://unpkg.com/@ffmpeg/core-mt@${CORE_VERSION}/dist/umd/ffmpeg-core`;
 
 const INPUT_FILE = 'input-video';
 const FRAME_PATTERN = 'frame_%05d.png';
 const OUTPUT_PATTERN = 'proc_%05d.png';
 const AUDIO_FILE = 'audio_track.m4a';
 const OUTPUT_FILE = 'output.mp4';
+
+const MAX_MISSING_FRAMES = 3;
+const SMOOTHING_ALPHA = 0.65;
+
+function smoothDetections(previous: Detection | null, current: Detection | null): {
+  detection: Detection | null;
+  nextPrevious: Detection | null;
+} {
+  if (current) {
+    if (!previous) {
+      return { detection: { ...current }, nextPrevious: { ...current } };
+    }
+    const blended: Detection = {
+      x: previous.x * (1 - SMOOTHING_ALPHA) + current.x * SMOOTHING_ALPHA,
+      y: previous.y * (1 - SMOOTHING_ALPHA) + current.y * SMOOTHING_ALPHA,
+      width: previous.width * (1 - SMOOTHING_ALPHA) + current.width * SMOOTHING_ALPHA,
+      height: previous.height * (1 - SMOOTHING_ALPHA) + current.height * SMOOTHING_ALPHA,
+      score: Math.max(previous.score, current.score)
+    };
+    return { detection: blended, nextPrevious: blended };
+  }
+
+  if (!previous) {
+    return { detection: null, nextPrevious: null };
+  }
+
+  const faded: Detection = {
+    ...previous,
+    score: previous.score * 0.85
+  };
+
+  if (faded.score < 0.1) {
+    return { detection: null, nextPrevious: null };
+  }
+
+  return { detection: faded, nextPrevious: faded };
+}
 
 async function canvasToUint8Array(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob>((resolve, reject) => {
@@ -93,11 +129,18 @@ export class VideoProcessor {
       return;
     }
 
+    const [coreJs, coreWasm, workerJs] = await Promise.all([
+      toBlobURL(`${CORE_BASE}.js`, 'text/javascript'),
+      toBlobURL(`${CORE_BASE}.wasm`, 'application/wasm'),
+      toBlobURL(`${CORE_BASE}.worker.js`, 'text/javascript')
+    ]);
+
     await this.ffmpeg.load({
-      coreURL: await toBlobURL(`${CORE_BASE}.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${CORE_BASE}.wasm`, 'application/wasm'),
-      workerURL: await toBlobURL(`${CORE_MT_BASE}.worker.js`, 'text/javascript')
+      coreURL: coreJs,
+      wasmURL: coreWasm,
+      workerURL: workerJs
     });
+
     this.loaded = true;
   }
 
@@ -171,14 +214,7 @@ export class VideoProcessor {
     const extractAudio = async () => {
       onStatus?.('Extracting audio track (if present)...');
       try {
-        const code = await this.ffmpeg.exec([
-          '-i',
-          INPUT_FILE,
-          '-vn',
-          '-acodec',
-          'copy',
-          AUDIO_FILE
-        ]);
+        const code = await this.ffmpeg.exec(['-i', INPUT_FILE, '-vn', '-acodec', 'copy', AUDIO_FILE]);
         if (code !== 0) {
           return false;
         }
@@ -210,6 +246,8 @@ export class VideoProcessor {
       const total = frameFiles.length;
       let frameWidth = 0;
       let frameHeight = 0;
+      let previousDetection: Detection | null = null;
+      let missingCounter = 0;
 
       onStatus?.('Anonymising detected faces frame-by-frame...');
 
@@ -225,7 +263,23 @@ export class VideoProcessor {
         previewCanvas.height = frameHeight;
         previewCtx.drawImage(bitmap, 0, 0);
 
-        const detection = await detector.detect(previewCanvas);
+        const rawDetection = await detector.detect(previewCanvas);
+        const { detection, nextPrevious } = smoothDetections(previousDetection, rawDetection);
+
+        if (rawDetection) {
+          missingCounter = 0;
+        } else if (nextPrevious) {
+          missingCounter += 1;
+        } else {
+          missingCounter = MAX_MISSING_FRAMES;
+        }
+
+        if (missingCounter > MAX_MISSING_FRAMES) {
+          previousDetection = null;
+        } else {
+          previousDetection = nextPrevious;
+        }
+
         if (detection) {
           anonymizeRegion(previewCanvas, previewCtx, detection, mode, strength);
         }
