@@ -1,10 +1,15 @@
 import * as ort from 'onnxruntime-web';
 import type { Detection } from './types';
 
-const MODEL_URL =
-  'https://github.com/deepinsight/insightface/releases/download/scrfd/scrfd_500m_bnkps.onnx';
+const MODEL_URLS = [
+  'https://github.com/deepinsight/insightface/releases/download/scrfd/scrfd_500m_bnkps.onnx',
+  'https://cdn.jsdelivr.net/gh/deepinsight/insightface@master/detection/scrfd/models/scrfd_500m_bnkps.onnx',
+  'https://huggingface.co/mbzuai-oryx/SCRFD/resolve/main/scrfd_500m_bnkps.onnx?download=1'
+];
+
 const INPUT_SIZE = 640;
 const SCORE_THRESHOLD = 0.4;
+const EXPANSION_RATIO = 0.2;
 
 interface StrideOutputs {
   stride: number;
@@ -23,6 +28,23 @@ interface TransformMeta {
 
 function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
+}
+
+async function downloadModel(): Promise<ArrayBuffer> {
+  let lastError: unknown = null;
+  for (const url of MODEL_URLS) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Request failed with status ${response.status}`);
+      }
+      return await response.arrayBuffer();
+    } catch (error) {
+      lastError = error;
+      console.warn(`Failed to fetch SCRFD model from ${url}:`, error);
+    }
+  }
+  throw new Error(`Unable to download SCRFD model. Last error: ${String(lastError)}`);
 }
 
 export class FaceDetector {
@@ -62,11 +84,10 @@ export class FaceDetector {
       return;
     }
 
-    const response = await fetch(MODEL_URL);
-    if (!response.ok) {
-      throw new Error(`Unable to download SCRFD model: ${response.statusText}`);
-    }
-    const modelBuffer = await response.arrayBuffer();
+    ort.env.wasm.numThreads = Math.min(4, Math.max(1, navigator.hardwareConcurrency || 1));
+    ort.env.wasm.proxy = true;
+
+    const modelBuffer = await downloadModel();
 
     const tryCreateSession = async (
       executionProviders: ort.InferenceSession.SessionOptions['executionProviders']
@@ -124,44 +145,31 @@ export class FaceDetector {
   }
 
   private preprocess(
-    source: CanvasImageSource,
+    canvas: OffscreenCanvas | HTMLCanvasElement,
     sourceWidth: number,
     sourceHeight: number
   ): { tensor: ort.Tensor; meta: TransformMeta } {
     const ctx = this.preprocessCtx;
-    ctx.save();
-    ctx.clearRect(0, 0, INPUT_SIZE, INPUT_SIZE);
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
-
     const scale = Math.min(INPUT_SIZE / sourceWidth, INPUT_SIZE / sourceHeight);
-    const resizeWidth = Math.round(sourceWidth * scale);
-    const resizeHeight = Math.round(sourceHeight * scale);
-    const padX = Math.floor((INPUT_SIZE - resizeWidth) / 2);
-    const padY = Math.floor((INPUT_SIZE - resizeHeight) / 2);
+    const newWidth = Math.round(sourceWidth * scale);
+    const newHeight = Math.round(sourceHeight * scale);
+    const padX = Math.floor((INPUT_SIZE - newWidth) / 2);
+    const padY = Math.floor((INPUT_SIZE - newHeight) / 2);
 
-    ctx.drawImage(
-      source,
-      0,
-      0,
-      sourceWidth,
-      sourceHeight,
-      padX,
-      padY,
-      resizeWidth,
-      resizeHeight
-    );
-    ctx.restore();
+    ctx.clearRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+    ctx.drawImage(canvas as CanvasImageSource, 0, 0, sourceWidth, sourceHeight, padX, padY, newWidth, newHeight);
 
     const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
-    const floatData = new Float32Array(INPUT_SIZE * INPUT_SIZE * 3);
+    const { data } = imageData;
     const area = INPUT_SIZE * INPUT_SIZE;
+    const floatData = new Float32Array(area * 3);
 
     for (let i = 0; i < area; i += 1) {
-      const pixelIndex = i * 4;
-      const r = (imageData.data[pixelIndex] - 127.5) / 128;
-      const g = (imageData.data[pixelIndex + 1] - 127.5) / 128;
-      const b = (imageData.data[pixelIndex + 2] - 127.5) / 128;
+      const r = data[i * 4];
+      const g = data[i * 4 + 1];
+      const b = data[i * 4 + 2];
 
       floatData[i] = r;
       floatData[i + area] = g;
@@ -194,18 +202,26 @@ export class FaceDetector {
     const mappedX1 = Math.max(0, Math.min(originalWidth, x1));
     const mappedY1 = Math.max(0, Math.min(originalHeight, y1));
 
+    const width = Math.max(0, mappedX1 - mappedX0);
+    const height = Math.max(0, mappedY1 - mappedY0);
+    const expandX = (width * EXPANSION_RATIO) / 2;
+    const expandY = (height * EXPANSION_RATIO) / 2;
+
+    const expandedX0 = Math.max(0, mappedX0 - expandX);
+    const expandedY0 = Math.max(0, mappedY0 - expandY);
+    const expandedX1 = Math.min(originalWidth, mappedX1 + expandX);
+    const expandedY1 = Math.min(originalHeight, mappedY1 + expandY);
+
     return {
-      x: mappedX0,
-      y: mappedY0,
-      width: Math.max(0, mappedX1 - mappedX0),
-      height: Math.max(0, mappedY1 - mappedY0),
+      x: expandedX0,
+      y: expandedY0,
+      width: Math.max(0, expandedX1 - expandedX0),
+      height: Math.max(0, expandedY1 - expandedY0),
       score: box.score
     };
   }
 
-  async detect(
-    canvas: OffscreenCanvas | HTMLCanvasElement
-  ): Promise<Detection | null> {
+  async detect(canvas: OffscreenCanvas | HTMLCanvasElement): Promise<Detection | null> {
     if (!this.session) {
       throw new Error('Face detector session not initialised. Call init() first.');
     }
