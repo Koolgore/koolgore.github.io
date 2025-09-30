@@ -1,72 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Face Mosaic Anonymizer</title>
-  <link rel="stylesheet" href="style.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0/dist/tf.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
-  <script defer src="script.js"></script>
-</head>
-<body>
-  <div class="page">
-    <header class="hero">
-      <div>
-        <h1>Face Mosaic Anonymizer</h1>
-        <p>Upload a video, tune the anonymization controls, and automatically apply a face-tracked mosaic to every frame.</p>
-      </div>
-    </header>
-
-    <main class="content">
-      <section class="controls-panel">
-        <h2>1. Upload video</h2>
-        <label class="file-input">
-          <span>Select a video file</span>
-          <input type="file" id="video-upload" accept="video/*" />
-        </label>
-        <p class="hint">All processing happens in your browser. Longer clips may take a while to process.</p>
-
-        <h2>2. Adjust settings</h2>
-        <div class="control-group">
-          <label for="mosaic-scale">Mosaic scale <span id="mosaic-scale-value">24</span></label>
-          <input type="range" id="mosaic-scale" min="6" max="80" step="2" value="24" />
-          <p class="hint">Higher values create larger blocks for a stronger mosaic effect.</p>
-        </div>
-        <div class="control-group">
-          <label for="mask-expansion">Mask expansion (px) <span id="mask-expansion-value">32</span></label>
-          <input type="range" id="mask-expansion" min="0" max="120" step="4" value="32" />
-          <p class="hint">Expand each detected face box to ensure complete coverage.</p>
-        </div>
-        <div class="control-group">
-          <label for="detection-threshold">Tracking sensitivity <span id="detection-threshold-value">0.75</span></label>
-          <input type="range" id="detection-threshold" min="0.3" max="0.95" step="0.01" value="0.75" />
-          <p class="hint">Lower the threshold if faces are missed. Raise it to avoid false positives.</p>
-        </div>
-
-        <button id="process-btn" class="primary" disabled>Start anonymizing</button>
-        <p id="status" class="status">Loading face detection model…</p>
-      </section>
-
-      <section class="preview-panel">
-        <h2>Preview</h2>
-        <div class="video-stage">
-          <video id="input-video" class="input-video" controls playsinline></video>
-          <canvas id="output-canvas" class="output-canvas"></canvas>
-        </div>
-        <div id="progress" class="progress hidden">
-          <div class="progress-bar">
-            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-          </div>
-          <span id="progress-text">0%</span>
-        </div>
-        <div id="result" class="result hidden">
-          <h3>Processed video</h3>
-          <video id="processed-video" controls loop playsinline></video>
-          <a id="download-link" class="download" download="anonymized.webm">Download anonymized video</a>
-        </div>
-      </section>
-    </main>
-  </div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browser Face Anonymizer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>
