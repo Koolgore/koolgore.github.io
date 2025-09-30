@@ -81,6 +81,10 @@ body {
   color: var(--muted);
 }
 
+.randomizer-controls {
+  margin-bottom: 1.5rem;
+}
+
 .export-setting-input {
   display: flex;
   align-items: center;
@@ -97,7 +101,6 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
-
 .file-picker {
   position: relative;
   overflow: hidden;

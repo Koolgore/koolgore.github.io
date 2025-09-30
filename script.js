@@ -11,6 +11,7 @@ const fileInput = document.getElementById("file-input");
 const exportButton = document.getElementById("export-btn");
 const exportDurationInput = document.getElementById("export-duration");
 const exportDurationValue = document.getElementById("export-duration-value");
+const randomEffectsButton = document.getElementById("random-effects-btn");
 const effectControls = document.getElementById("effect-controls");
 const dropHint = dropZone.querySelector(".drop-hint");
 
@@ -130,6 +131,78 @@ function formatSliderValue(value, step) {
     return value.toFixed(step < 0.1 ? 2 : 1);
   }
   return String(Math.round(value));
+}
+
+function countDecimals(value) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const stringValue = value.toString();
+  if (!stringValue.includes(".")) {
+    return 0;
+  }
+  return stringValue.split(".")[1]?.length ?? 0;
+}
+
+function randomRangeValue(config) {
+  const min = Number(config.min ?? 0);
+  const max = Number(config.max ?? min);
+  const step = Number(config.step ?? 0);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+    return min;
+  }
+
+  if (!Number.isFinite(step) || step <= 0) {
+    const range = max - min;
+    const raw = min + Math.random() * range;
+    const decimals = Math.max(countDecimals(min), countDecimals(max), 2);
+    return parseFloat(raw.toFixed(Math.min(decimals, 4)));
+  }
+
+  const precision = Math.max(countDecimals(step), countDecimals(min), countDecimals(max));
+  const factor = 10 ** precision;
+  const minScaled = Math.round(min * factor);
+  const maxScaled = Math.round(max * factor);
+  const stepScaled = Math.max(1, Math.round(step * factor));
+  const steps = Math.max(0, Math.floor((maxScaled - minScaled) / stepScaled));
+  const index = steps > 0 ? Math.floor(Math.random() * (steps + 1)) : 0;
+  const valueScaled = minScaled + index * stepScaled;
+  return valueScaled / factor;
+}
+
+function randomizeEffects() {
+  const enabledEffects = EFFECTS.filter(() => Math.random() < 0.5);
+  if (enabledEffects.length === 0 && EFFECTS.length > 0) {
+    const fallback = EFFECTS[Math.floor(Math.random() * EFFECTS.length)];
+    enabledEffects.push(fallback);
+  }
+
+  const enabledSet = new Set(enabledEffects.map((effect) => effect.id));
+
+  EFFECTS.forEach((effect) => {
+    setEffectEnabled(effect.id, enabledSet.has(effect.id));
+  });
+
+  EFFECTS.forEach((effect) => {
+    const ui = effectUI.get(effect.id);
+    if (!ui) return;
+
+    Object.entries(effect.params).forEach(([paramKey, config]) => {
+      const value = config.type === "toggle" ? Math.random() < 0.5 : randomRangeValue(config);
+      updateEffectParam(effect.id, paramKey, value);
+      const elements = ui.paramElements.get(paramKey);
+      if (!elements) return;
+
+      if (config.type === "toggle") {
+        elements.input.checked = Boolean(value);
+      } else {
+        elements.input.value = value;
+        elements.valueLabel.textContent = formatSliderValue(value, config.step);
+      }
+    });
+
+    effectRuntimeState.delete(effect.id);
+  });
 }
 
 function initEffectUI() {
@@ -368,15 +441,19 @@ async function exportVideo() {
     return;
   }
 
-  isExporting = true;
-  exportButton.disabled = true;
+  if (typeof window.MediaRecorder !== "function") {
+    alert("MediaRecorder is not available. Consider adding ffmpeg.wasm in the lib directory as a fallback.");
+    exportButton.disabled = false;
+    isExporting = false;
+    return;
+  }
 
   const stream = canvas.captureStream(30);
   const mimeCandidates = [
     "video/mp4;codecs=avc1",
     "video/mp4",
   ];
-  const mimeType = mimeCandidates.find((type) => MediaRecorder.isTypeSupported(type));
+  const mimeType = mimeCandidates.find((type) => window.MediaRecorder.isTypeSupported(type));
   if (!mimeType) {
     alert(
       "No supported MP4 MediaRecorder codec found in this browser. " +
@@ -387,7 +464,10 @@ async function exportVideo() {
     return;
   }
 
-  const recorder = new MediaRecorder(stream, { mimeType });
+  isExporting = true;
+  exportButton.disabled = true;
+
+  const recorder = new window.MediaRecorder(stream, { mimeType });
   const chunks = [];
   const wasLooping = video.loop;
   video.loop = false;
@@ -514,6 +594,12 @@ function setupControls() {
     };
     exportDurationInput.addEventListener("input", updateLabel);
     updateLabel();
+  }
+
+  if (randomEffectsButton) {
+    randomEffectsButton.addEventListener("click", () => {
+      randomizeEffects();
+    });
   }
 
   window.addEventListener("beforeunload", () => {
