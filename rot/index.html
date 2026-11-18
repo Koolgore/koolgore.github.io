@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rot Garden</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap">
+<style>
+/* Layout: one full-bleed specimen; lyrics are written into it by the simulation, so there is no overlay UI. */
+:root{ --bg:#0a0806; --ink:#ece4d1; --dim:#a59a86; color-scheme:dark; }
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.4 system-ui,sans-serif;overflow:hidden;cursor:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#fx{pointer-events:none}
+#nogl{position:fixed;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--dim)}
+</style>
+</head>
+<body>
+<canvas id="gl" aria-label="Simulated decaying specimen"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+
+<div id="nogl" hidden>This specimen needs WebGL2, which this browser did not provide.</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Context
+   ===================================================================== */
+const glc = document.getElementById('gl');
+const fxc = document.getElementById('fx');
+const gl = glc.getContext('webgl2', {antialias:false, alpha:false, depth:false, stencil:false, premultipliedAlpha:false, powerPreference:'high-performance'});
+const fx = fxc.getContext('2d');
+if (!gl) { document.getElementById('nogl').hidden = false; return; }
+const HAS_FLOAT = !!gl.getExtension('EXT_color_buffer_float');
+gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+let _s = (Math.random() * 4294967296) >>> 0;
+function R() { _s = (_s + 0x6D2B79F5) | 0; let t = Math.imul(_s ^ (_s >>> 15), 1 | _s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+const rnd = Math.random;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* =====================================================================
+   Lyrics: edit these. Each line is grown in mould, then rots while the next grows.
+   ===================================================================== */
+const LYRICS = {
+  lines: [
+    'THE ROT GETS IN',
+    'EVERYTHING SOFT GOES BACK TO THE GROUND',
+  ],
+  substrate: 1,     // 0 bread, 1 citrus peel, 2 apple flesh, 3 beech wood (or use #bread, #citrus, #apple, #wood)
+  speed: 6,         // time-lapse multiplier for the biology
+  start: 0.8,       // seconds before the first line is inoculated
+  grow: 3.6,        // seconds the inoculation sweep takes to cross a line, plus fill
+  hold: 3.2,        // seconds a line stays fully grown before it starts to rot
+  gap: 1.2,         // seconds between a line starting to rot and the next line being inoculated
+  loop: true,
+  font: '"Archivo Black", "Arial Black", "Helvetica Neue", Arial, sans-serif',
+  maxRows: 3,
+  fringe: 0.72,     // chance a hypha survives each step past a letter edge (1 = grows anywhere)
+  spill: 0.22,      // how fertile the substrate is outside the letters (0 = nothing grows there)
+  warp: 4.5,        // how far letter outlines are pushed around by noise, in grid cells
+  wild: 0.6,        // rate of airborne spores, bacteria and slime mould across the whole specimen
+};
+const LYRIC_MODE = LYRICS.lines.length > 0;
+
+/* =====================================================================
+   Substrates and organisms
+   ===================================================================== */
+const SUBS = [
+  { id:0, genus:'Triticum aestivum', part:'bread crumb', relief:7.5, gloss:0.06, sss:0.15, nut:0.95, wat:0.22,
+    A:[0.93,0.86,0.71], B:[0.79,0.68,0.50], F:[0.99,0.96,0.88], r1:[0.66,0.60,0.47], r2:[0.36,0.30,0.21], r3:[0.12,0.09,0.06], liq:[0.24,0.17,0.08],
+    arr:[1.2,0.9,0.9,0.5], bac:0.4, temp:21.2, seeds:6, slime:0.55 },
+  { id:1, genus:'Citrus sinensis', part:'peel', relief:4.2, gloss:0.42, sss:0.35, nut:0.75, wat:0.3,
+    A:[0.98,0.56,0.13], B:[0.88,0.40,0.05], F:[1.0,0.72,0.28], r1:[0.80,0.60,0.30], r2:[0.47,0.31,0.12], r3:[0.15,0.10,0.04], liq:[0.34,0.20,0.05],
+    arr:[2.4,0.5,0.4,0.5], bac:0.6, temp:20.6, seeds:5, slime:0.35 },
+  { id:2, genus:'Malus domestica', part:'cut flesh', relief:3.2, gloss:0.5, sss:0.5, nut:1.0, wat:0.48,
+    A:[0.97,0.91,0.73], B:[0.90,0.80,0.56], F:[1.0,0.98,0.88], r1:[0.74,0.52,0.26], r2:[0.40,0.21,0.08], r3:[0.12,0.06,0.03], liq:[0.32,0.16,0.05],
+    arr:[1.3,0.9,0.55,1.0], bac:1.6, temp:21.8, seeds:5, slime:0.3 },
+  { id:3, genus:'Fagus sylvatica', part:'sapwood', relief:3.4, gloss:0.12, sss:0.08, nut:0.55, wat:0.38,
+    A:[0.66,0.57,0.44], B:[0.52,0.44,0.33], F:[0.44,0.35,0.25], r1:[0.75,0.71,0.60], r2:[0.33,0.24,0.15], r3:[0.10,0.07,0.05], liq:[0.15,0.10,0.06],
+    arr:[0.5,0.4,0.25,1.4], bac:0.3, temp:17.4, seeds:7, slime:0.8 },
+];
+
+// Fungi. Distances are in grid cells, rates are per tick.
+const SP = [
+  { key:'pen', speed:0.042, wiggle:0.13, sense:2.6, sa:0.55, turn:0.4, wN:1.0, wSelf:1.7, wOther:2.6, wBac:1.0,
+    branch:0.6, bAng:0.5, life:15, dep:0.5, eat:0.05, crowd:0.45,
+    thick:0.011, yld:0.45, spoT:0.5, spoR:0.012, rotK:0.00022, watK:0.00004, ring:360,
+    hy:[0.95,0.97,0.94], hyA:0.15, gut:'rgba(60,112,96,0.7)', puff:[95,150,130] },
+  { key:'asp', speed:0.045, wiggle:0.15, sense:2.6, sa:0.55, turn:0.4, wN:1.0, wSelf:1.6, wOther:2.6, wBac:1.0,
+    branch:0.55, bAng:0.55, life:15, dep:0.5, eat:0.05, crowd:0.45,
+    thick:0.012, yld:0.45, spoT:0.45, spoR:0.014, rotK:0.00026, watK:0.00004, ring:300,
+    hy:[0.97,0.94,0.82], hyA:0.14, gut:'rgba(40,34,28,0.75)', puff:[40,36,30] },
+  { key:'rhi', speed:0.075, wiggle:0.09, sense:4.0, sa:0.45, turn:0.22, wN:1.0, wSelf:1.0, wOther:2.0, wBac:0.5,
+    branch:0.16, bAng:0.7, life:40, dep:0.38, eat:0.03, crowd:0.3,
+    thick:0.016, yld:0.42, spoT:0.6, spoR:0.006, rotK:0.0003, watK:0.00006, ring:500,
+    hy:[0.9,0.9,0.88], hyA:0.21, gut:'rgba(70,70,70,0.7)', puff:[60,60,58] },
+  { key:'fus', speed:0.052, wiggle:0.14, sense:2.8, sa:0.5, turn:0.38, wN:1.0, wSelf:1.5, wOther:2.2, wBac:1.0,
+    branch:0.45, bAng:0.55, life:18, dep:0.5, eat:0.045, crowd:0.4,
+    thick:0.011, yld:0.45, spoT:0.6, spoR:0.008, rotK:0.0003, watK:0.00005, ring:340,
+    hy:[0.99,0.9,0.93], hyA:0.16, gut:'rgba(190,110,110,0.7)', puff:[220,150,150] },
+];
+
+/* =====================================================================
+   GLSL
+   ===================================================================== */
+const NOISE = `
+float hash12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+vec2 hash22(vec2 p){ vec3 p3=fract(vec3(p.xyx)*vec3(0.1031,0.1030,0.0973)); p3+=dot(p3,p3.yzx+33.33); return fract((p3.xx+p3.yz)*p3.zy); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(hash12(i),hash12(i+vec2(1,0)),u.x), mix(hash12(i+vec2(0,1)),hash12(i+vec2(1,1)),u.x), u.y); }
+float fbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<5;i++){ s+=a*vnoise(p); p=mat2(1.6,1.2,-1.2,1.6)*p+vec2(17.1,3.7); a*=0.5; } return s/0.97; }
+float fbm3(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<3;i++){ s+=a*vnoise(p); p=mat2(1.6,1.2,-1.2,1.6)*p+vec2(17.1,3.7); a*=0.5; } return s/0.875; }
+vec3 worley(vec2 p){ vec2 i=floor(p), f=fract(p); float d1=9.0, d2=9.0, id=0.0;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){ vec2 g=vec2(float(x),float(y)); vec2 o=hash22(i+g); vec2 r=g+o-f; float d=dot(r,r);
+    if(d<d1){ d2=d1; d1=d; id=hash12(i+g+7.7); } else if(d<d2){ d2=d; } }
+  return vec3(sqrt(d1), sqrt(d2), id); }
+`;
+
+const HENC = HAS_FLOAT ? `float HENC(float h){return h;} float HDEC(float v){return v;}`
+                       : `float HENC(float h){return clamp(h/64.0+0.5,0.0,1.0);} float HDEC(float v){return (v-0.5)*64.0;}`;
+
+const VS_TRI = `#version 300 es
+out vec2 vUv;
+void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2), float(gl_VertexID&2)); vUv=p; gl_Position=vec4(p*2.0-1.0,0.0,1.0); }`;
+
+/* --- substrate generator: R height, G tone, B feature, A nutrient richness --- */
+const FS_BASE = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform vec2 uCss; uniform int uSub; uniform vec2 uSeed;
+${NOISE}
+vec4 bread(vec2 p){
+  vec2 w=vec2(fbm3(p*0.004), fbm3(p*0.004+7.0))*34.0;
+  vec2 q=p+w;
+  vec3 a=worley(q/24.0);
+  vec3 b=worley(q/10.0+3.7);
+  vec3 c=worley(q/4.2+9.1);
+  float ia=smoothstep(0.0,0.22,a.y-a.x);
+  float ib=smoothstep(0.0,0.28,b.y-b.x);
+  float ic=smoothstep(0.0,0.35,c.y-c.x);
+  float big=smoothstep(0.55,0.8,a.z);
+  float h=1.0 - 0.55*ia*big - 0.35*ib*step(0.3,b.z) - 0.16*ic;
+  h+=0.07*vnoise(p*vec2(0.9,0.5)) + 0.04*vnoise(p*1.7);
+  float tone=0.5 + 0.55*(fbm(p*0.006)-0.5) + 0.18*(c.z-0.5) - 0.12*ia*big;
+  float feat=(1.0-ib)*(1.0-ia*big);
+  return vec4(clamp(h,0.0,1.0), tone, feat, 0.8+0.2*fbm3(p*0.003));
+}
+vec4 citrus(vec2 p){
+  vec2 w=vec2(fbm3(p*0.007), fbm3(p*0.007+5.0))*7.0;
+  vec3 g=worley((p+w)/6.2);
+  vec3 g2=worley((p+w)/2.6+4.0);
+  float pit=1.0-smoothstep(0.05,0.52,g.x);
+  float h=0.62 + 0.2*(fbm(p*0.01)-0.5) - 0.24*pit*(0.6+0.4*g.z) + 0.05*(g2.y-g2.x) + 0.03*vnoise(p*1.3);
+  float scar=smoothstep(0.62,0.7,fbm3(p*0.0045+13.0));
+  h-=scar*0.12*vnoise(p*0.2);
+  float tone=0.5 + 0.6*(fbm(p*0.005)-0.5) + 0.1*pit - 0.25*scar;
+  return vec4(clamp(h,0.0,1.0), tone, pit*(0.5+0.5*g.z), 0.55+0.25*fbm3(p*0.003));
+}
+vec4 flesh(vec2 p){
+  vec2 w=vec2(fbm3(p*0.005), fbm3(p*0.005+3.0))*12.0;
+  vec3 c=worley((p+w)/5.2);
+  float wall=1.0-smoothstep(0.0,0.11,c.y-c.x);
+  float dome=smoothstep(0.0,0.5,c.y-c.x);
+  float h=0.55 + 0.18*(fbm(p*0.006)-0.5) + 0.09*dome + 0.04*vnoise(p*0.8);
+  float v=abs(fbm3(p*vec2(0.0042,0.0047)+11.0)-0.5);
+  float strand=1.0-smoothstep(0.006,0.016,v);
+  h-=strand*0.1;
+  float tone=0.5 + 0.5*(fbm(p*0.004)-0.5) + 0.12*(c.z-0.5) - 0.2*strand;
+  return vec4(clamp(h,0.0,1.0), tone, max(wall*0.5, strand), 0.9+0.1*fbm3(p*0.002));
+}
+vec4 wood(vec2 p){
+  float warp=fbm(p*vec2(0.0016,0.006))*30.0 + fbm3(p*vec2(0.006,0.02))*3.0;
+  float r=p.y*0.04 + warp;
+  float ring=fract(r);
+  float late=smoothstep(0.62,0.93,ring)*(1.0-smoothstep(0.93,1.0,ring));
+  float fib=vnoise(vec2(p.x*0.035, p.y*1.15 + warp*3.0));
+  float fib2=vnoise(vec2(p.x*0.12, p.y*2.3 + warp*5.0));
+  float ray=smoothstep(0.82,0.95,vnoise(vec2(p.x*0.6, p.y*0.05+warp)));
+  float h=0.6 + 0.13*fib + 0.06*fib2 - 0.07*late + 0.05*(fbm3(p*0.02)-0.5) + 0.05*ray;
+  float chk=smoothstep(0.88,0.97,vnoise(vec2(p.x*0.003, p.y*0.22+warp*0.5)));
+  h-=chk*0.45*smoothstep(0.3,0.7,vnoise(p*vec2(0.02,0.0)+vec2(0.0,p.y*0.001)));
+  float tone=0.5 - 0.35*late + 0.2*(fib-0.5) + 0.35*(fbm(p*0.003)-0.5) + 0.12*ray;
+  return vec4(clamp(h,0.0,1.0), tone, late, 0.5+0.12*fbm3(p*0.004));
+}
+void main(){
+  vec2 p=vec2(vUv.x,1.0-vUv.y)*uCss + uSeed;
+  vec4 r = uSub==0 ? bread(p) : uSub==1 ? citrus(p) : uSub==2 ? flesh(p) : wood(p);
+  o=clamp(r,0.0,1.0);
+}`;
+
+/* --- G-buffer: albedo+gloss, height+spec+fuzz+subsurface --- */
+const FS_G = `#version 300 es
+precision highp float;
+in vec2 vUv;
+layout(location=0) out vec4 oA;
+layout(location=1) out vec4 oH;
+uniform sampler2D uBase, uEnv, uMyc, uSpo, uMisc, uAux, uHyph;
+uniform vec2 uCss, uGrid;
+uniform float uTime, uRelief, uGloss, uSSS;
+uniform vec3 uSubA, uSubB, uSubF, uRot1, uRot2, uRot3, uLiq;
+${NOISE}
+${HENC}
+vec4 bic(sampler2D t, vec2 uv){
+  vec2 st=uv*uGrid-0.5; vec2 i=floor(st), f=st-i;
+  vec2 f2=f*f, f3=f2*f;
+  vec2 w0=(1.0-3.0*f+3.0*f2-f3)/6.0, w1=(4.0-6.0*f2+3.0*f3)/6.0, w2=(1.0+3.0*f+3.0*f2-3.0*f3)/6.0, w3=f3/6.0;
+  vec2 g0=w0+w1, g1=w2+w3;
+  vec2 p0=(i-0.5+w1/g0)/uGrid, p1=(i+1.5+w3/g1)/uGrid;
+  return g0.y*(g0.x*texture(t,p0)+g1.x*texture(t,vec2(p1.x,p0.y))) + g1.y*(g0.x*texture(t,vec2(p0.x,p1.y))+g1.x*texture(t,p1));
+}
+void main(){
+  vec2 g=vec2(vUv.x,1.0-vUv.y);
+  vec2 p=g*uCss;
+  vec2 cell=1.0/uGrid;
+  vec2 j1=vec2(vnoise(p*0.06), vnoise(p*0.06+31.7))-0.5;
+  vec2 j2=vec2(vnoise(p*0.29+7.1), vnoise(p*0.29+19.3))-0.5;
+  vec2 gj=g+(j1*2.6+j2*1.1)*cell;
+  vec4 B=texture(uBase,vUv);
+  vec4 E=bic(uEnv, g+j1*1.0*cell);
+  vec4 M=bic(uMyc, gj);
+  vec4 S=bic(uSpo, gj+j2*0.6*cell);
+  vec4 X=bic(uMisc, g+j1*1.3*cell);
+  vec4 A=bic(uAux, gj);
+  vec4 HY=texture(uHyph,vUv);
+  float Mraw=dot(texture(uMyc,g),vec4(1.0));
+
+  float rot=clamp(E.r,0.0,1.0), wat=clamp(E.g,0.0,1.0), bac=E.a;
+  float mott=fbm3(p*0.018+3.0);
+
+  /* substrate & decay */
+  vec3 col=mix(uSubB,uSubA,B.g);
+  col=mix(col,uSubF,B.b*0.45);
+  float r1=smoothstep(0.03,0.42,rot+(mott-0.5)*0.2);
+  float r2=smoothstep(0.32,0.8,rot+(mott-0.5)*0.24);
+  float r3=smoothstep(0.74,1.0,rot+(mott-0.5)*0.12);
+  float soak=smoothstep(0.015,0.14,rot)*(1.0-r2);
+  col=mix(col,col*vec3(0.9,0.84,0.74)+vec3(0.04,0.035,0.02),soak*0.6);
+  col=mix(col,uRot1*(0.85+0.3*B.g),r1);
+  col=mix(col,uRot2*(0.78+0.5*mott),r2);
+  col=mix(col,uRot3*(0.8+0.4*mott),r3);
+  float wet=smoothstep(0.32,0.9,wat);
+  col*=1.0-0.22*wet;
+  col=mix(col,vec3(0.40,0.07,0.22),clamp(A.b,0.0,1.0)*0.72);
+  float dig=clamp(A.r,0.0,1.0);
+  float h=B.r*uRelief*(1.0-0.6*r2) - rot*12.0 - dig*9.0;
+  if(r1>0.001){
+    float wr=1.0-abs(fbm(p*0.03+9.0)*2.0-1.0);
+    h+=wr*wr*3.8*r1*(1.0-r3*0.5)*(1.0-wet);
+  }
+  float gloss=uGloss*(1.0-0.55*r2)+wet*0.55+soak*0.15;
+  float spec=0.3+0.7*wet;
+  float fuzz=0.0;
+  float sss=uSSS*(1.0-r2);
+  col*=1.0-0.4*smoothstep(0.1,0.8,dig);
+
+  float dry=1.0-smoothstep(0.12,0.34,wat);
+  float moldc=clamp(smoothstep(0.05,0.6,M.r+M.g+M.b+M.a)+smoothstep(0.05,0.45,S.r+S.g+S.b+S.a)*0.8+smoothstep(0.15,0.4,bac),0.0,1.0);
+  float crk=smoothstep(0.6,0.92,rot)*dry*(1.0-moldc);
+  if(crk>0.01){
+    vec3 w=worley(p/44.0+j1*0.5);
+    float c=1.0-smoothstep(0.0,0.025+0.03*crk,w.y-w.x);
+    vec3 w2=worley(p/16.0+5.0);
+    float mask=smoothstep(0.6,0.8,fbm3(p*0.01+7.0))*smoothstep(0.7,1.0,crk);
+    c=max(c,(1.0-smoothstep(0.0,0.03,w2.y-w2.x))*mask*0.7);
+    h-=c*crk*7.0;
+    col*=1.0-c*crk*0.75;
+    h+=(1.0-c)*crk*smoothstep(0.0,0.2,w.y-w.x)*1.5;
+  }
+
+  /* pooled liquid & fermentation bubbles */
+  float liq=smoothstep(0.6,0.88,wat)*smoothstep(0.35,0.7,rot);
+  if(liq>0.001){
+    float lvl=-rot*12.0-dig*9.0+1.6+0.35*sin(uTime*0.6+p.x*0.05+p.y*0.03);
+    h=mix(h,max(h,lvl),liq);
+    col=mix(col,uLiq*(0.75+0.5*mott),liq*0.9);
+    gloss=mix(gloss,1.0,liq); spec=mix(spec,1.0,liq); sss*=1.0-liq;
+    vec3 bw=worley(p/6.5+vec2(0.0,uTime*0.012));
+    float life=fract(bw.z*13.7+uTime*0.025);
+    float has=step(bw.z,0.4*liq)*step(life,0.8);
+    float rr=(0.16+0.22*fract(bw.z*7.3))*smoothstep(0.0,0.12,life);
+    float inb=1.0-smoothstep(rr-0.05,rr,bw.x);
+    float dome=sqrt(max(0.0,1.0-(bw.x*bw.x)/(rr*rr+1e-4)));
+    h+=has*inb*dome*2.4;
+    col=mix(col,col*0.65+vec3(0.07,0.06,0.04),has*inb*0.5);
+  }
+
+  /* zone lines where colonies meet */
+  float zl=smoothstep(0.12,0.45,X.r);
+  col=mix(col,vec3(0.07,0.045,0.03),zl*0.9);
+  h+=zl*0.8;
+
+  /* bacterial slime */
+  float bcov=smoothstep(0.12,0.3,bac);
+  if(bcov>0.001){
+    float st=X.a;
+    vec3 bc=mix(vec3(0.9,0.84,0.66),vec3(0.78,0.2,0.24),smoothstep(0.25,0.5,st));
+    bc=mix(bc,vec3(0.94,0.78,0.26),smoothstep(0.7,0.9,st));
+    bc*=0.86+0.28*vnoise(p*0.07);
+    col=mix(col,bc,bcov*0.8);
+    h+=bcov*(1.4+1.8*smoothstep(0.3,0.95,bac));
+    gloss=mix(gloss,0.93,bcov); spec=mix(spec,0.85,bcov); sss=mix(sss,0.55,bcov);
+  }
+
+  /* mycelium */
+  float mt=M.r+M.g+M.b+M.a;
+  float dead=clamp(A.a,0.0,1.0);
+  if(mt>0.002 || HY.a>0.003){
+    vec3 mc=(M.r*vec3(0.95,0.96,0.93)+M.g*vec3(0.96,0.93,0.8)+M.b*vec3(0.87,0.87,0.85)+M.a*vec3(0.98,0.9,0.92))/max(mt,1e-4);
+    float fib=0.55*fbm3(p*0.5)+0.45*vnoise(vec2(p.x*1.6+p.y*0.3,p.y*0.5));
+    float fz=smoothstep(0.04,0.8,mt);
+    float hyv=clamp(HY.a*1.25,0.0,1.0)*smoothstep(0.0,0.05,Mraw);
+    vec3 hyc=HY.rgb/max(HY.a,1e-3);
+    float cover=clamp(fz*(0.5+0.5*fib)+hyv*0.8,0.0,1.0)*(1.0-liq*0.85);
+    vec3 myco=mix(mc,hyc,clamp(hyv*0.6,0.0,1.0));
+    myco=mix(myco,vec3(0.34,0.28,0.2),dead*0.75);
+    col=mix(col,myco,cover*(1.0-dead*0.35));
+    float fh=M.r*3.0+M.g*3.0+M.b*8.5+M.a*5.5;
+    h+=fh*(0.45+0.55*fib)*(1.0-0.6*dead)+hyv*1.6;
+    fuzz=cover*(1.0-dead*0.5);
+    gloss=mix(gloss,0.04,cover); spec=mix(spec,0.05,cover); sss=mix(sss,0.3,cover);
+  }
+
+  /* Penicillium: blue-green velvet with zonation rings */
+  float dry2=1.0-liq*0.85;
+  float s0=smoothstep(0.04,0.55,S.r)*dry2*(1.0-dead*0.3);
+  if(s0>0.001){
+    float pw=0.72+0.56*vnoise(p*1.4)*(0.55+0.45*vnoise(p*0.33));
+    float furrow=0.85+0.15*sin(atan(j1.y,j1.x)*3.0+fbm3(p*0.05)*12.0);
+    vec3 pc=mix(vec3(0.20,0.43,0.39),vec3(0.44,0.64,0.54),X.b);
+    pc*=pw*furrow;
+    pc=mix(pc,vec3(0.29,0.25,0.17)*(0.8+0.4*pw),dead*0.8);
+    col=mix(col,pc,s0);
+    h+=s0*(0.9*pw+0.6);
+    if(S.r>0.7 && dead<0.3){
+      vec3 d=worley(p/5.5+21.0);
+      float drop=step(d.z,0.035)*(1.0-smoothstep(0.14,0.22,d.x));
+      h+=drop*1.6; col=mix(col,vec3(0.62,0.5,0.2),drop*0.6);
+      gloss=mix(gloss,1.0,drop); spec=mix(spec,1.0,drop);
+    }
+  }
+  /* Aspergillus: black conidial heads on a pale felt */
+  float s1=smoothstep(0.03,0.6,S.g)*dry2;
+  if(s1>0.001){
+    vec3 w=worley(p/2.5);
+    float dens=step(w.z,s1*1.15);
+    float head=(1.0-smoothstep(0.16,0.46,w.x))*dens;
+    float matur=smoothstep(0.45,1.0,S.g);
+    vec3 felt=mix(vec3(0.84,0.78,0.55),vec3(0.2,0.17,0.13),matur)*(0.85+0.3*vnoise(p*0.5));
+    vec3 ac=mix(felt,vec3(0.035,0.032,0.03),head);
+    ac=mix(ac,vec3(0.17,0.13,0.09),dead*0.6);
+    col=mix(col,ac,smoothstep(0.0,0.3,s1));
+    h+=head*1.7+s1*1.1;
+  }
+  /* Rhizopus: black sporangia on grey stalks */
+  float s2=smoothstep(0.03,0.7,S.b)*dry2;
+  if(s2>0.001){
+    vec3 w=worley(p/4.4+13.0);
+    float dens=step(w.z,s2*0.75);
+    float pin=(1.0-smoothstep(0.1,0.3,w.x))*dens;
+    col=mix(col,col*0.72,s2*0.35);
+    col=mix(col,vec3(0.035,0.035,0.035),pin*0.94);
+    h+=pin*3.2;
+  }
+  /* Fusarium: salmon sporodochia and purple stain */
+  float s3=smoothstep(0.05,0.6,S.a)*dry2;
+  if(s3>0.001){
+    float bl=smoothstep(0.35,0.75,fbm3(p*0.08+2.0));
+    vec3 fc=mix(vec3(0.96,0.78,0.8),vec3(0.9,0.5,0.45),bl);
+    fc=mix(fc,vec3(0.6,0.28,0.52),smoothstep(0.6,1.0,S.a)*0.55);
+    fc=mix(fc,vec3(0.36,0.24,0.22),dead*0.7);
+    col=mix(col,fc,s3*0.85);
+    h+=s3*(0.5+bl*1.5);
+  }
+
+  /* Physarum plasmodium */
+  float sl=X.g;
+  float vein=smoothstep(0.2,0.5,sl);
+  float film=smoothstep(0.05,0.2,sl)*(1.0-vein);
+  if(film>0.001){
+    col=mix(col,col*vec3(1.05,0.95,0.55)+vec3(0.12,0.09,0.0),film*0.55);
+    h+=film*0.6; gloss=mix(gloss,0.6,film); spec=mix(spec,0.45,film);
+  }
+  if(vein>0.001){
+    float pulse=0.86+0.14*sin(uTime*1.6-(p.x+p.y)*0.025);
+    vec3 yc=mix(vec3(0.86,0.52,0.04),vec3(0.99,0.8,0.1),smoothstep(0.25,0.7,sl))*pulse;
+    yc=mix(yc,vec3(1.0,0.9,0.5),smoothstep(0.75,1.0,sl)*0.3);
+    col=mix(col,yc,vein*0.95);
+    h+=vein*(1.6+2.6*smoothstep(0.4,1.0,sl))*(0.8+0.2*pulse);
+    gloss=mix(gloss,0.75,vein); spec=mix(spec,0.6,vein); sss=mix(sss,0.7,vein);
+    fuzz*=1.0-vein;
+  }
+
+  /* frass */
+  float fr=A.g;
+  if(fr>0.02){
+    vec3 w=worley(p/2.1+5.0);
+    float gr=(1.0-smoothstep(0.18,0.38,w.x))*step(w.z,fr*1.2);
+    col=mix(col,vec3(0.11,0.075,0.045),gr*0.92);
+    h+=gr*1.1;
+  }
+
+  oA=vec4(clamp(col,0.0,1.0),clamp(gloss,0.0,1.0));
+  oH=vec4(HENC(h),clamp(spec,0.0,1.0),clamp(fuzz,0.0,1.0),clamp(sss,0.0,1.0));
+}`;
+
+/* --- lighting --- */
+const FS_L = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uA, uH;
+uniform vec2 uRes, uCss; uniform float uRS, uTime, uGrain; uniform vec3 uL;
+float hash12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+${HENC}
+float Hf(ivec2 q){ return HDEC(texelFetch(uH,clamp(q,ivec2(0),ivec2(uRes)-1),0).r); }
+float Hl(vec2 uv,float l){ return HDEC(textureLod(uH,uv,l).r); }
+float shadowAt(vec2 uv,float h0){
+  vec2 dir=normalize(uL.xy); float rise=uL.z/length(uL.xy);
+  float s=1.0, d=1.2;
+  for(int i=0;i<12;i++){
+    float hs=Hl(uv+dir*d/uCss,1.0);
+    float ray=h0+d*rise;
+    s=min(s,1.0-clamp((hs-ray)/(0.22*d+0.7),0.0,1.0)*0.92);
+    d=d*1.32+0.8;
+  }
+  return s;
+}
+void main(){
+  ivec2 ip=ivec2(gl_FragCoord.xy);
+  vec4 Hc=texelFetch(uH,ip,0);
+  float h=HDEC(Hc.r);
+  float hl=Hf(ip-ivec2(1,0)), hr=Hf(ip+ivec2(1,0)), hd=Hf(ip-ivec2(0,1)), hu=Hf(ip+ivec2(0,1));
+  vec3 n=normalize(vec3((hl-hr)*0.5*uRS,(hd-hu)*0.5*uRS,1.0));
+  vec2 px=1.0/uCss;
+  float bl=Hl(vUv-vec2(px.x*1.5,0.0),1.5), br=Hl(vUv+vec2(px.x*1.5,0.0),1.5), bd=Hl(vUv-vec2(0.0,px.y*1.5),1.5), bu=Hl(vUv+vec2(0.0,px.y*1.5),1.5);
+  vec3 nb=normalize(vec3((bl-br)/3.0,(bd-bu)/3.0,1.0));
+  vec4 Al=texelFetch(uA,ip,0);
+  vec3 alb=Al.rgb; float gloss=Al.a;
+  float spec=Hc.g, fuzz=Hc.b, sss=Hc.a;
+  n=normalize(mix(n,nb,fuzz*0.7));
+  float hb1=Hl(vUv,2.5), hb2=Hl(vUv,4.5);
+  float ao=clamp(1.0+(h-hb1)*0.07+(h-hb2)*0.025,0.3,1.2);
+  float sh=shadowAt(vUv,h+0.3);
+  vec3 L=uL;
+  float ndl=dot(n,L);
+  float dif=mix(max(ndl,0.0),max((ndl+0.55)/1.55,0.0),max(fuzz,sss*0.6));
+  vec3 Hh=normalize(L+vec3(0.0,0.0,1.0));
+  float ex=mix(12.0,220.0,gloss*gloss);
+  float sp=pow(max(dot(n,Hh),0.0),ex)*spec*(ex+8.0)/48.0;
+  vec3 Rv=reflect(vec3(0.0,0.0,-1.0),n);
+  float box=smoothstep(0.88,0.975,dot(Rv,L))*gloss*spec;
+  vec3 L2=normalize(vec3(0.75,-0.35,0.55));
+  float fill=max(dot(n,L2),0.0);
+  vec3 keyC=vec3(1.0,0.93,0.82), fillC=vec3(0.5,0.6,0.72);
+  float rim=pow(1.0-n.z,1.6)*fuzz;
+  vec3 c=alb*(keyC*dif*sh*1.22 + fillC*fill*0.2 + vec3(0.17,0.17,0.19)*ao)*ao;
+  c+=alb*sss*0.18*keyC*(0.4+0.6*sh);
+  c+=keyC*(sp+box*0.55)*mix(0.2,1.0,sh);
+  c+=vec3(0.92,0.93,0.95)*rim*0.32*mix(0.4,1.0,sh);
+  c=c/(1.0+c*0.32)*1.12;
+  float lum=dot(c,vec3(0.3,0.59,0.11));
+  c=mix(vec3(lum),c,1.05);
+  c*=mix(vec3(0.94,0.98,0.9),vec3(1.0),smoothstep(0.0,0.5,lum));
+  vec2 q=vUv-0.5; q.x*=uRes.x/uRes.y;
+  c*=1.0-smoothstep(0.38,1.1,length(q))*0.58;
+  c+=(hash12(gl_FragCoord.xy+uGrain*137.0)-0.5)*0.032;
+  o=vec4(max(c,0.0),1.0);
+}`;
+
+/* --- hyphae lines --- */
+const VS_LINE = `#version 300 es
+in vec2 aPos; in vec4 aCol; uniform vec2 uCss; out vec4 vCol;
+void main(){ vCol=aCol; vec2 c=aPos/uCss; gl_Position=vec4(c.x*2.0-1.0,1.0-c.y*2.0,0.0,1.0); }`;
+const FS_LINE = `#version 300 es
+precision mediump float; in vec4 vCol; out vec4 o; void main(){ o=vCol; }`;
+
+/* =====================================================================
+   GL helpers
+   ===================================================================== */
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(s); console.error(log); throw new Error(log); }
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const inf = gl.getActiveUniform(p, i); u[inf.name] = gl.getUniformLocation(p, inf.name); }
+  return { p, u };
+}
+function makeTex(w, h, ifmt, fmt, type, minF, magF, levels) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  if (levels) gl.texStorage2D(gl.TEXTURE_2D, levels, ifmt, w, h);
+  else gl.texImage2D(gl.TEXTURE_2D, 0, ifmt, w, h, 0, fmt, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minF);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magF);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function makeFbo(texs) {
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  texs.forEach((t, i) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i, gl.TEXTURE_2D, t, 0));
+  gl.drawBuffers(texs.map((_, i) => gl.COLOR_ATTACHMENT0 + i));
+  const st = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+  if (st !== gl.FRAMEBUFFER_COMPLETE) throw new Error('framebuffer incomplete ' + st);
+  return f;
+}
+
+const progBase = program(VS_TRI, FS_BASE);
+const progG = program(VS_TRI, FS_G);
+const progL = program(VS_TRI, FS_L);
+const progLine = program(VS_LINE, FS_LINE);
+const vaoEmpty = gl.createVertexArray();
+
+const MAXSEG = 50000;
+const segBuf = new Float32Array(MAXSEG * 12);
+let nSeg = 0;
+const vaoLine = gl.createVertexArray();
+const bufLine = gl.createBuffer();
+gl.bindVertexArray(vaoLine);
+gl.bindBuffer(gl.ARRAY_BUFFER, bufLine);
+gl.bufferData(gl.ARRAY_BUFFER, segBuf.byteLength, gl.DYNAMIC_DRAW);
+const locPos = gl.getAttribLocation(progLine.p, 'aPos'), locCol = gl.getAttribLocation(progLine.p, 'aCol');
+gl.enableVertexAttribArray(locPos); gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 24, 0);
+gl.enableVertexAttribArray(locCol); gl.vertexAttribPointer(locCol, 4, gl.FLOAT, false, 24, 8);
+gl.bindVertexArray(null);
+
+/* =====================================================================
+   Sizes & render targets
+   ===================================================================== */
+let W = 0, H = 0, RS = 1, PW = 0, PH = 0, GW = 0, GH = 0, N = 0, csx = 3, csy = 3, BD = 1;
+let qualityScale = 1;
+const PIX_BUDGET = 2.6e6;
+function measure() {
+  W = Math.max(1, innerWidth); H = Math.max(1, innerHeight);
+  const dpr = window.devicePixelRatio || 1;
+  RS = Math.max(0.5, Math.min(dpr, Math.sqrt(PIX_BUDGET / (W * H))) * qualityScale);
+  PW = Math.max(1, Math.round(W * RS)); PH = Math.max(1, Math.round(H * RS));
+  BD = Math.min(dpr, 2);
+}
+function gridFor() {
+  const cs = Math.max(LYRIC_MODE ? 3.1 : 2.8, Math.sqrt(W * H / 170000));
+  GW = Math.max(48, Math.round(W / cs)); GH = Math.max(48, Math.round(H / cs)); N = GW * GH;
+  csx = W / GW; csy = H / GH;
+}
+
+let texBase = null, fboBase = null, texHy = null, fboHy = null, texGA = null, texGH = null, fboG = null;
+let hyW = 0, hyH = 0;
+const fieldTex = [];
+function allocTargets() {
+  [texBase, texGA, texGH].forEach(t => t && gl.deleteTexture(t));
+  [fboBase, fboG].forEach(f => f && gl.deleteFramebuffer(f));
+  texBase = makeTex(PW, PH, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR, gl.LINEAR);
+  fboBase = makeFbo([texBase]);
+  const levels = Math.floor(Math.log2(Math.max(PW, PH))) + 1;
+  texGA = makeTex(PW, PH, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST, gl.NEAREST);
+  texGH = makeTex(PW, PH, HAS_FLOAT ? gl.RGBA16F : gl.RGBA8, gl.RGBA, null, gl.LINEAR_MIPMAP_LINEAR, gl.LINEAR, levels);
+  fboG = makeFbo([texGA, texGH]);
+  glc.width = PW; glc.height = PH;
+  fxc.width = Math.round(W * BD); fxc.height = Math.round(H * BD);
+}
+function allocHyphae(keep) {
+  const t = makeTex(PW, PH, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR, gl.LINEAR);
+  const f = makeFbo([t]);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  if (keep && fboHy) {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fboHy); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, f);
+    gl.blitFramebuffer(0, 0, hyW, hyH, 0, 0, PW, PH, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+  }
+  if (texHy) gl.deleteTexture(texHy); if (fboHy) gl.deleteFramebuffer(fboHy);
+  texHy = t; fboHy = f; hyW = PW; hyH = PH;
+}
+function allocFields() {
+  fieldTex.forEach(t => gl.deleteTexture(t)); fieldTex.length = 0;
+  for (let k = 0; k < 5; k++) fieldTex.push(makeTex(GW, GH, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR, gl.LINEAR));
+}
+function drawBase(fbo, w, h) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h);
+  gl.useProgram(progBase.p);
+  gl.uniform2f(progBase.u.uCss, W, H); gl.uniform1i(progBase.u.uSub, SUB.id); gl.uniform2f(progBase.u.uSeed, specSeed[0], specSeed[1]);
+  gl.bindVertexArray(vaoEmpty); gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+function readBaseGrid() {
+  const t = makeTex(GW, GH, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST, gl.NEAREST);
+  const f = makeFbo([t]);
+  drawBase(f, GW, GH);
+  const buf = new Uint8Array(GW * GH * 4);
+  gl.readPixels(0, 0, GW, GH, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(f); gl.deleteTexture(t);
+  return buf;
+}
+
+/* =====================================================================
+   Simulation state
+   ===================================================================== */
+let SUB = SUBS[1];
+let specSeed = [0, 0], specNo = 0;
+let env, myc, spo, misc, aux, born, nut0, w0, hp0, fert, doom, slime, tmpA, tmpB, tmpC, tmpD, tmpE, tmpF, bnoise;
+function smoothNoise(cell, lo, hi) {
+  const out = new Float32Array(N), cw = Math.ceil(GW / cell) + 2, ch = Math.ceil(GH / cell) + 2, g = new Float32Array(cw * ch);
+  for (let i = 0; i < g.length; i++) g[i] = R();
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const fx_ = x / cell, fy = y / cell, ix = fx_ | 0, iy = fy | 0; let tx = fx_ - ix, ty = fy - iy;
+    tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+    const a = g[iy * cw + ix], b = g[iy * cw + ix + 1], c = g[(iy + 1) * cw + ix], d = g[(iy + 1) * cw + ix + 1];
+    out[y * GW + x] = lo + (hi - lo) * ((a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty);
+  }
+  return out;
+}
+let FIELDS, PACKS, PACK8;
+let T = 0, colonies = 0;
+const MAXT = 26000;
+const tipX = new Float32Array(MAXT), tipY = new Float32Array(MAXT), tipA = new Float32Array(MAXT), tipL = new Float32Array(MAXT);
+const tipDX = new Float32Array(MAXT), tipDY = new Float32Array(MAXT), tipS = new Uint8Array(MAXT);
+let nTip = 0;
+const MAXP = 26000;
+const pX = new Float32Array(MAXP), pY = new Float32Array(MAXP), pA = new Float32Array(MAXP);
+let nP = 0, slimeOn = false, slimeAge = 0, slimeArrived = false, slimeT = 0;
+const stats = { myc:0, spo:0, rot:0, liq:0, wat:0, act:0, bac:0 };
+
+function initSim() {
+  N = GW * GH;
+  env = new Float32Array(N * 4); myc = new Float32Array(N * 4); spo = new Float32Array(N * 4);
+  misc = new Float32Array(N * 4); aux = new Float32Array(N * 4);
+  born = new Float32Array(N).fill(-1); nut0 = new Float32Array(N); fert = new Float32Array(N).fill(LYRIC_MODE ? 0 : 1); doom = new Float32Array(N);
+  slime = new Float32Array(N); tmpA = new Float32Array(N); tmpB = new Float32Array(N); tmpC = new Float32Array(N); tmpD = new Float32Array(N); tmpE = new Float32Array(N); tmpF = new Float32Array(N); w0 = new Float32Array(N);
+  { const n1 = smoothNoise(7, 0, 1), n2 = smoothNoise(2.5, 0, 1); bnoise = new Float32Array(N); for (let i = 0; i < N; i++) bnoise[i] = 0.15 + 1.5 * Math.pow(n1[i] * 0.65 + n2[i] * 0.35, 1.6); }
+  { const l1 = smoothNoise(30, -0.5, 0.5), l2 = smoothNoise(11, -0.5, 0.5); hp0 = new Float32Array(N); for (let i = 0; i < N; i++) hp0[i] = l1[i] * 0.45 + l2[i] * 0.2; }
+  FIELDS = [env, myc, spo, misc, aux];
+  PACKS = FIELDS.map(() => new Uint8ClampedArray(N * 4));
+  PACK8 = PACKS.map(p => new Uint8Array(p.buffer));
+  const base = readBaseGrid();
+  for (let y = 0; y < GH; y++) {
+    const ry = GH - 1 - y;
+    for (let x = 0; x < GW; x++) {
+      const i = y * GW + x, b = (ry * GW + x) * 4, o = i * 4;
+      const hgt = base[b] / 255, rich = base[b + 3] / 255;
+      const nu = SUB.nut * (0.55 + 0.45 * rich) * (LYRIC_MODE ? 1 : fert[i]);
+      env[o + 2] = nut0[i] = nu;
+      hp0[i] += (hgt - 0.5) * 0.25;
+      env[o + 1] = w0[i] = clamp(SUB.wat * (0.75 + 0.6 * (0.6 - hgt)) + (R() - 0.5) * 0.03, 0, 1);
+    }
+  }
+  T = 0; colonies = 0; nTip = 0; nP = 0; nSeg = 0;
+  slimeOn = false; slimeAge = 0; slimeArrived = false;
+  slimeT = R() < (LYRIC_MODE ? LYRICS.wild : SUB.slime) ? 1800 + R() * 3500 : 1e9;
+  for (const s of sys) s.acc = 0;
+  bugs.length = 0; parts.length = 0;
+  // first arrivals
+  if (!LYRIC_MODE) {
+    for (let k = 0; k < SUB.seeds; k++) seedRandom(pickSpecies(), 0.6 + R() * 0.4);
+    const nb = Math.round(SUB.bac * 1.5 + R());
+    for (let k = 0; k < nb; k++) seedRandomBac();
+  }
+  for (let k = 0; k < 3 + (rnd() * 3 | 0); k++) spawnMiteEdge(true);
+  for (const d of FIELDS) d && 0;
+  dirty.fill(true);
+}
+function pickSpecies() {
+  const a = SUB.arr; let t = a[0] + a[1] + a[2] + a[3], r = R() * t;
+  for (let s = 0; s < 4; s++) { r -= a[s]; if (r <= 0) return s; }
+  return 0;
+}
+function addTip(x, y, a, s, life) {
+  if (nTip >= MAXT) return;
+  const k = nTip++;
+  tipX[k] = x; tipY[k] = y; tipA[k] = a; tipS[k] = s; tipL[k] = life; tipDX[k] = x; tipDY[k] = y;
+}
+function seedColony(s, gx, gy, n) {
+  gx = Math.floor(gx); gy = Math.floor(gy);
+  if (gx < 2 || gy < 2 || gx >= GW - 2 || gy >= GH - 2) return false;
+  colonies++;
+  const P = SP[s];
+  for (let k = 0; k < n; k++) addTip(gx + 0.5 + (R() - 0.5), gy + 0.5 + (R() - 0.5), R() * TAU, s, P.life * (0.6 + 0.8 * R()));
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const i = (gy + dy) * GW + gx + dx, o = i * 4;
+    myc[o + s] = Math.max(myc[o + s], dx || dy ? 0.3 : 0.6);
+    if (born[i] < 0) { born[i] = T; misc[o + 2] = 0.5 + 0.5 * Math.sin(T * TAU / P.ring + s); }
+  }
+  return true;
+}
+function seedRandom(s, frac) {
+  for (let tries = 0; tries < 24; tries++) {
+    const gx = 4 + R() * (GW - 8), gy = 4 + R() * (GH - 8);
+    const o = ((gy | 0) * GW + (gx | 0)) * 4;
+    const mt = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+    if (mt < 0.01 && env[o + 2] > 0.25 && env[o + 3] < 0.1) { return seedColony(s, gx, gy, Math.round(8 * (frac || 1)) + 4); }
+  }
+  return false;
+}
+function seedBac(gx, gy, strain, r) {
+  r = r || 2.5;
+  for (let dy = -Math.ceil(r); dy <= Math.ceil(r); dy++) for (let dx = -Math.ceil(r); dx <= Math.ceil(r); dx++) {
+    if (dx * dx + dy * dy > r * r) continue;
+    const x = Math.floor(gx) + dx, y = Math.floor(gy) + dy;
+    if (x < 1 || y < 1 || x >= GW - 1 || y >= GH - 1) continue;
+    const o = (y * GW + x) * 4;
+    env[o + 3] = Math.max(env[o + 3], 0.45); misc[o + 3] = strain; bacAny = true;
+    env[o + 1] = Math.min(1, env[o + 1] + 0.12);
+  }
+}
+function randomStrain() { const r = R(); return r < 0.62 ? 0.0 : r < 0.84 ? 0.5 : 1.0; }
+function seedRandomBac() {
+  for (let tries = 0; tries < 20; tries++) {
+    const gx = 4 + R() * (GW - 8), gy = 4 + R() * (GH - 8);
+    const o = ((gy | 0) * GW + (gx | 0)) * 4;
+    if (myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3] < 0.05 && env[o + 2] > 0.3) { seedBac(gx, gy, randomStrain()); return; }
+  }
+}
+const plas = { x: 0, y: 0, r: 0, rMax: 0 };
+function spawnSlime(gx, gy, count, spread) {
+  if (!slimeOn || nP === 0) { plas.x = gx; plas.y = gy; plas.r = spread; plas.rMax = Math.min(GW, GH) * 0.32; }
+  else { const w = count / (nP + count); plas.x += (gx - plas.x) * w; plas.y += (gy - plas.y) * w; plas.r = Math.max(plas.r, Math.hypot(gx - plas.x, gy - plas.y) + spread); }
+  slimeOn = true;
+  for (let k = 0; k < count && nP < MAXP; k++) {
+    const a = R() * TAU, r = Math.sqrt(R()) * spread;
+    pX[nP] = clamp(gx + Math.cos(a) * r, 1, GW - 2); pY[nP] = clamp(gy + Math.sin(a) * r, 1, GH - 2); pA[nP] = R() * TAU; nP++;
+  }
+}
+
+/* ---------------- hyphal tips ---------------- */
+function pushSeg(x0, y0, x1, y1, s) {
+  if (nSeg >= MAXSEG) return;
+  const P = SP[s], a = P.hyA * (0.55 + 0.9 * R()), o = nSeg * 12;
+  const r = P.hy[0] * a, g = P.hy[1] * a, b = P.hy[2] * a;
+  segBuf[o] = x0 * csx; segBuf[o + 1] = y0 * csy; segBuf[o + 2] = r; segBuf[o + 3] = g; segBuf[o + 4] = b; segBuf[o + 5] = a;
+  segBuf[o + 6] = x1 * csx; segBuf[o + 7] = y1 * csy; segBuf[o + 8] = r; segBuf[o + 9] = g; segBuf[o + 10] = b; segBuf[o + 11] = a;
+  nSeg++;
+}
+function sense(x, y, s, P) {
+  if (x < 0 || y < 0 || x >= GW || y >= GH) return -9;
+  const o = ((y | 0) * GW + (x | 0)) * 4;
+  const own = myc[o + s], tot = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+  return env[o + 2] * fert[o >> 2] * P.wN - own * P.wSelf - (tot - own) * P.wOther - env[o + 3] * P.wBac;
+}
+function stepTips(dt) {
+  let n = nTip;
+  const capF = 1 - n / MAXT, capB = capF * capF;
+  const segMin = 1.3 / RS, segMin2 = segMin * segMin;
+  for (let k = 0; k < n; k++) {
+    const s = tipS[k], P = SP[s];
+    let x = tipX[k], y = tipY[k], a = tipA[k];
+    const sd = P.sense, sa = P.sa;
+    const c = sense(x + Math.cos(a) * sd, y + Math.sin(a) * sd, s, P) + (R() - 0.5) * 0.08;
+    const l = sense(x + Math.cos(a + sa) * sd, y + Math.sin(a + sa) * sd, s, P) + (R() - 0.5) * 0.08;
+    const r = sense(x + Math.cos(a - sa) * sd, y + Math.sin(a - sa) * sd, s, P) + (R() - 0.5) * 0.08;
+    const sp = P.speed * dt;
+    if (l > c && l >= r) a += P.turn * sp; else if (r > c && r > l) a -= P.turn * sp;
+    a += (R() - 0.5) * P.wiggle * 3.46 * Math.sqrt(sp);
+    const nx = x + Math.cos(a) * sp, ny = y + Math.sin(a) * sp;
+    let kill = false;
+    if (nx < 0.5 || ny < 0.5 || nx >= GW - 0.5 || ny >= GH - 0.5) kill = true;
+    else {
+      const j = (ny | 0) * GW + (nx | 0), o = j * 4;
+      const own = myc[o + s], tot = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3], other = tot - own;
+      const nu = env[o + 2];
+      const entering = j !== ((y | 0) * GW + (x | 0)), fj = fert[j];
+      if (other > 0.3 && doom[j] < 0.1) { misc[o] = Math.min(1, misc[o] + 0.3); kill = true; }
+      else if (env[o + 3] > 0.5 && R() < 3 * sp) kill = true;
+      else if (fj < 0.02 || (fj < 0.45 && entering && R() > LYRICS.fringe)) kill = true;
+      else if (nu < 0.04 && R() < 6 * sp) kill = true;
+      else if (own > 0.82 && j !== ((y | 0) * GW + (x | 0)) && R() < P.crowd) kill = true;
+      else {
+        myc[o + s] = Math.min(1, own + P.dep * sp);
+        env[o + 2] = Math.max(0, nu - P.eat * sp);
+        if (born[j] < 0) { born[j] = T; misc[o + 2] = 0.5 + 0.5 * Math.sin(T * TAU / P.ring + s * 1.7); }
+        tipL[k] -= sp;
+        if (tipL[k] <= 0) kill = true;
+        else if (n < MAXT && R() < P.branch * sp * nu * capB * (0.35 + 0.65 * fj)) {
+          const side = R() < 0.5 ? -1 : 1, ba = a + side * P.bAng * (0.6 + 0.8 * R());
+          tipX[n] = nx; tipY[n] = ny; tipA[n] = ba; tipS[n] = s; tipL[n] = P.life * (0.5 + R()); tipDX[n] = nx; tipDY[n] = ny; n++;
+        }
+      }
+    }
+    const ddx = (nx - tipDX[k]) * csx, ddy = (ny - tipDY[k]) * csy;
+    if (kill) {
+      if (ddx * ddx + ddy * ddy > 0.2) pushSeg(tipDX[k], tipDY[k], clamp(nx, 0, GW), clamp(ny, 0, GH), s);
+      n--;
+      if (k !== n) { tipX[k] = tipX[n]; tipY[k] = tipY[n]; tipA[k] = tipA[n]; tipS[k] = tipS[n]; tipL[k] = tipL[n]; tipDX[k] = tipDX[n]; tipDY[k] = tipDY[n]; k--; }
+      continue;
+    }
+    if (ddx * ddx + ddy * ddy > segMin2) { pushSeg(tipDX[k], tipDY[k], nx, ny, s); tipDX[k] = nx; tipDY[k] = ny; }
+    tipX[k] = nx; tipY[k] = ny; tipA[k] = a;
+  }
+  nTip = n;
+}
+
+/* ---------------- grid processes ---------------- */
+function stepFungi(dt) {
+  for (let i = 0; i < N; i++) {
+    const o = i * 4;
+    const mt = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+    if (mt < 0.002) continue;
+    const wat = env[o + 1];
+    let nut = env[o + 2], dead = aux[o + 3];
+    const mf = 0.35 + Math.min(1, wat * 1.7) * 0.75;
+    let rotAdd = 0, watAdd = 0;
+    for (let s = 0; s < 4; s++) {
+      let m = myc[o + s]; if (m <= 0.002) continue;
+      const P = SP[s];
+      if (nut > 0.03) {
+        const g = P.thick * m * (1 - mt) * nut * mf * dt * Math.min(1, fert[i] * 2);
+        if (g > 0) { m += g; nut -= g * P.yld; }
+        nut -= 0.00013 * m * dt * mf;
+        if (m > P.spoT) { const sv = spo[o + s], ds = P.spoR * (m - P.spoT) * dt * (1 - sv) * (0.4 + nut); spo[o + s] = sv + ds; nut -= ds * 0.2; }
+      } else {
+        m -= 0.0008 * dt * m;
+        dead += 0.0012 * dt * (m + 0.2);
+      }
+      if (wat > 0.72) { m -= 0.002 * dt * m; dead += 0.001 * dt; }
+      rotAdd += P.rotK * m; watAdd += P.watK * m * 0.5;
+      myc[o + s] = m;
+    }
+    if (dead > 0.4) { for (let s = 0; s < 4; s++) { const v = spo[o + s]; if (v > 0.3) spo[o + s] = v - (v - 0.3) * 0.0004 * dt; else if (wat > 0.7) spo[o + s] = v * (1 - 0.002 * dt); } }
+    const m0 = myc[o], m1 = myc[o + 1], m2 = myc[o + 2], m3 = myc[o + 3];
+    const pairs = m0 * (m1 + m2 + m3) + m1 * (m2 + m3) + m2 * m3;
+    if (pairs > 0.03 && doom[i] < 0.05) misc[o] = Math.min(1, misc[o] + pairs * 0.03 * dt);
+    if (m3 > 0.5) aux[o + 2] = Math.min(1, aux[o + 2] + 0.00025 * dt * m3);
+    let rot = env[o] + rotAdd * dt * (0.4 + wat) * (0.3 + nut);
+    env[o] = rot > 1 ? 1 : rot;
+    const w = wat + watAdd * dt * nut;
+    env[o + 1] = w > 1 ? 1 : w;
+    env[o + 2] = nut < 0 ? 0 : nut;
+    aux[o + 3] = dead > 1 ? 1 : dead;
+  }
+}
+function fillGaps() {
+  const row = GW * 4;
+  for (let y = 1; y < GH - 1; y++) {
+    for (let x = 1; x < GW - 1; x++) {
+      const o = (y * GW + x) * 4;
+      if (env[o + 2] < 0.05 || fert[o >> 2] < 0.4) continue;
+      for (let s = 0; s < 4; s++) {
+        const m = myc[o + s]; if (m > 0.6) continue;
+        const f = (myc[o - 4 + s] + myc[o + 4 + s] + myc[o - row + s] + myc[o + row + s]) * 0.1;
+        if (f > 0.25 && f > m) {
+          myc[o + s] = f;
+          const i = o >> 2;
+          if (born[i] < 0) { born[i] = T; misc[o + 2] = 0.5 + 0.5 * Math.sin(T * TAU / SP[s].ring + s * 1.7); }
+        }
+      }
+    }
+  }
+}
+let bacAny = true;
+function stepBacteria(dt) {
+  if (!bacAny) { let t = 0; for (let i = 3; i < env.length; i += 4) t += env[i]; if (t === 0) return; bacAny = true; }
+  const D = 0.034 * dt, row = GW * 4;
+  let tot = 0;
+  for (let y = 0; y < GH; y++) {
+    for (let x = 0; x < GW; x++) {
+      const i = y * GW + x, o = i * 4, b = env[o + 3];
+      const bl = x > 0 ? env[o - 1] : b, br = x < GW - 1 ? env[o + 7] : b;
+      const bu = y > 0 ? env[o - row + 3] : b, bd = y < GH - 1 ? env[o + row + 3] : b;
+      const sum = bl + br + bu + bd;
+      if (b < 1e-4 && sum < 1e-4) { tmpA[i] = 0; continue; }
+      const wat = env[o + 1], nut = env[o + 2];
+      const mt = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+      const wetF = clamp((wat - 0.08) * 3, 0, 1);
+      const bn = bnoise[i];
+      let gr = 0.02 * b * (1 - b - mt * 0.8) * nut * wetF * dt * bn;
+      let nb = b + D * (sum - 4 * b) * (0.25 + 0.55 * wetF) * bn + gr;
+      if (nut < 0.03) nb -= 0.0005 * dt * b;
+
+      if (gr > 0) env[o + 2] = Math.max(0, nut - gr * 0.9);
+      if (b > 0.05) {
+        env[o] = Math.min(1, env[o] + 0.0009 * b * dt * (0.3 + wat));
+        env[o + 1] = Math.min(1, wat + 0.0006 * b * dt * (0.25 + nut));
+      }
+      if (b < 0.03 && nb >= 0.03) {
+        let bm = bl, src = o - 4;
+        if (br > bm) { bm = br; src = o + 4; } if (bu > bm) { bm = bu; src = o - row; } if (bd > bm) { src = o + row; }
+        if (src >= 0 && src < N * 4) misc[o + 3] = misc[src + 3];
+      }
+      tmpA[i] = nb < 0 ? 0 : nb > 1 ? 1 : nb;
+    }
+  }
+  for (let i = 0; i < N; i++) { env[i * 4 + 3] = tmpA[i]; tot += tmpA[i]; }
+  if (tot === 0) bacAny = false;
+}
+function stepWater(dt) {
+  const df = Math.min(dt, 2), D = 0.012 * df, F = 0.075 * df, G = 4.0, Dr = 0.03 * df, row = GW * 4;
+  const evap = 0.00006 * dt, evapF = 0.00028 * dt, decay = (LYRIC_MODE ? 0.00002 : 0.00005) * dt;
+  // pass 1: potential of free water and how much of its outflow each cell can afford
+  for (let i = 0; i < N; i++) {
+    const o = i * 4, w = env[o + 1], r = env[o];
+    const bound = w0[i] * (1 - 0.92 * r);
+    const free = w > bound ? w - bound : 0;
+    tmpC[i] = free + G * ((1 - r) * 0.5 - aux[o] * 0.5 + hp0[i]);
+    tmpD[i] = free;
+  }
+  for (let y = 0; y < GH; y++) {
+    for (let x = 0; x < GW; x++) {
+      const i = y * GW + x, p = tmpC[i];
+      let out = 0;
+      if (x > 0) { const d = p - tmpC[i - 1]; if (d > 0) out += d; }
+      if (x < GW - 1) { const d = p - tmpC[i + 1]; if (d > 0) out += d; }
+      if (y > 0) { const d = p - tmpC[i - GW]; if (d > 0) out += d; }
+      if (y < GH - 1) { const d = p - tmpC[i + GW]; if (d > 0) out += d; }
+      out *= F;
+      tmpB[i] = out > tmpD[i] ? (out > 0 ? tmpD[i] / out : 0) : 1;
+      tmpA[i] = out * tmpB[i];
+    }
+  }
+  // pass 2: apply flows, diffusion of humidity, rot halo, evaporation
+  for (let y = 0; y < GH; y++) {
+    for (let x = 0; x < GW; x++) {
+      const i = y * GW + x, o = i * 4, p = tmpC[i];
+      const w = env[o + 1], r = env[o];
+      let inflow = 0;
+      if (x > 0) { const d = tmpC[i - 1] - p; if (d > 0) inflow += d * tmpB[i - 1]; }
+      if (x < GW - 1) { const d = tmpC[i + 1] - p; if (d > 0) inflow += d * tmpB[i + 1]; }
+      if (y > 0) { const d = tmpC[i - GW] - p; if (d > 0) inflow += d * tmpB[i - GW]; }
+      if (y < GH - 1) { const d = tmpC[i + GW] - p; if (d > 0) inflow += d * tmpB[i + GW]; }
+      const wl = x > 0 ? env[o - 3] : w, wr = x < GW - 1 ? env[o + 5] : w, wu = y > 0 ? env[o - row + 1] : w, wd = y < GH - 1 ? env[o + row + 1] : w;
+      const bnd = w0[i] * (1 - 0.92 * r), fr = w > bnd ? w - bnd : 0;
+      let nw = w - tmpA[i] + inflow * F + D * (wl + wr + wu + wd - 4 * w) - evap * (w - fr) - evapF * fr;
+      const rl = x > 0 ? env[o - 4] : r, rr = x < GW - 1 ? env[o + 4] : r, ru = y > 0 ? env[o - row] : r, rd = y < GH - 1 ? env[o + row] : r;
+      const lapR = rl + rr + ru + rd - 4 * r;
+      let nr = r + (lapR > 0 ? Dr * lapR : 0) + decay * (0.3 + w);
+      const cons = 1 - env[o + 2] / (nut0[i] + 1e-4);
+      if (cons * 0.88 > nr) nr = cons * 0.88;
+      tmpE[i] = nw < 0 ? 0 : nw > 1 ? 1 : nw;
+      tmpF[i] = nr > 1 ? 1 : nr;
+    }
+  }
+  for (let i = 0; i < N; i++) { env[i * 4 + 1] = tmpE[i]; env[i * 4] = tmpF[i]; }
+}
+const SL = { sd: 6, sa: 0.39, ra: 0.785, spd: 0.75, dep: 0.08, dec: 0.87, food: 0.08, div: 1.4, blur: 0.3 };
+function slimeSense(x, y) {
+  if (x < 1 || y < 1 || x >= GW - 1 || y >= GH - 1) return -1;
+  const i = (y | 0) * GW + (x | 0), o = i * 4;
+  return slime[i] + SL.food * (env[o + 3] + spo[o] + spo[o + 1] + spo[o + 2] + spo[o + 3]) + 0.15 * SL.food * env[o + 2];
+}
+function stepSlime(dt) {
+  if (!slimeOn) return;
+  slimeAge += dt;
+  const SD = SL.sd, SA = SL.sa, RA = SL.ra * Math.min(1, dt), spd = SL.spd * dt;
+  if (slimeAge > 6000) { const kill = Math.ceil(nP * 0.0006 * dt); nP = Math.max(0, nP - kill); }
+  // the plasmodium creeps toward food and slowly widens
+  if (nP > 0) {
+    let bx = 0, by = 0;
+    for (let k = 0; k < 8; k++) { const a = k / 8 * TAU, v = slimeSense(plas.x + Math.cos(a) * plas.r, plas.y + Math.sin(a) * plas.r) - slime[(clamp(plas.y + Math.sin(a) * plas.r, 0, GH - 1) | 0) * GW + (clamp(plas.x + Math.cos(a) * plas.r, 0, GW - 1) | 0)]; bx += Math.cos(a) * v; by += Math.sin(a) * v; }
+    const bl = Math.hypot(bx, by) || 1;
+    plas.x = clamp(plas.x + (bx / bl * 0.6 + (R() - 0.5)) * 0.025 * dt, plas.r * 0.4, GW - plas.r * 0.4);
+    plas.y = clamp(plas.y + (by / bl * 0.6 + (R() - 0.5)) * 0.025 * dt, plas.r * 0.4, GH - plas.r * 0.4);
+    plas.r = Math.min(plas.rMax, plas.r + 0.006 * dt);
+  }
+  const reseed = 0.02 * dt, far2 = plas.r * plas.r * 1.4;
+  for (let k = 0; k < nP; k++) {
+    let x = pX[k], y = pY[k], a = pA[k];
+    const ddx = x - plas.x, ddy = y - plas.y;
+    if (R() < reseed || ddx * ddx + ddy * ddy > far2) {
+      const ra = R() * TAU, rr = Math.sqrt(R()) * plas.r;
+      x = pX[k] = clamp(plas.x + Math.cos(ra) * rr, 1, GW - 2); y = pY[k] = clamp(plas.y + Math.sin(ra) * rr, 1, GH - 2); a = pA[k] = R() * TAU;
+    }
+    const f = slimeSense(x + Math.cos(a) * SD, y + Math.sin(a) * SD);
+    const l = slimeSense(x + Math.cos(a + SA) * SD, y + Math.sin(a + SA) * SD);
+    const r = slimeSense(x + Math.cos(a - SA) * SD, y + Math.sin(a - SA) * SD);
+    if (f > l && f > r) { } else if (f < l && f < r) a += (R() < 0.5 ? -1 : 1) * RA; else if (l > r) a += RA; else if (r > l) a -= RA;
+    a += (R() - 0.5) * 0.15;
+    if (R() < 0.0015 * dt) a = R() * TAU;
+    const nx = x + Math.cos(a) * spd, ny = y + Math.sin(a) * spd;
+    if (nx < 1 || ny < 1 || nx >= GW - 1 || ny >= GH - 1) { pA[k] = R() * TAU; continue; }
+    pX[k] = nx; pY[k] = ny; pA[k] = a;
+    const i = (ny | 0) * GW + (nx | 0), o = i * 4;
+    slime[i] = Math.min(3, slime[i] + SL.dep * dt);
+    env[o + 3] *= 1 - 0.02 * dt;
+    spo[o] *= 1 - 0.01 * dt; spo[o + 1] *= 1 - 0.01 * dt; spo[o + 2] *= 1 - 0.01 * dt; spo[o + 3] *= 1 - 0.01 * dt;
+  }
+  const dec = Math.pow(SL.dec, dt), bl = SL.blur;
+  for (let y = 0; y < GH; y++) {
+    const y0 = y > 0 ? y - 1 : y, y1 = y < GH - 1 ? y + 1 : y;
+    for (let x = 0; x < GW; x++) {
+      const x0 = x > 0 ? x - 1 : x, x1 = x < GW - 1 ? x + 1 : x;
+      const a = y0 * GW, b = y * GW, c = y1 * GW;
+      const s = slime[a + x0] + slime[a + x] + slime[a + x1] + slime[b + x0] + slime[b + x] + slime[b + x1] + slime[c + x0] + slime[c + x] + slime[c + x1];
+      tmpA[b + x] = (slime[b + x] * (1 - bl) + s * 0.1111 * bl) * dec;
+    }
+  }
+  let any = false;
+  for (let i = 0; i < N; i++) { const v = tmpA[i]; slime[i] = v; misc[i * 4 + 1] = v > SL.div ? 1 : v / SL.div; if (v > 0.01) any = true; }
+  if (!any && nP === 0) slimeOn = false;
+}
+function events(dt) {
+  const rain = LYRIC_MODE ? LYRICS.wild * 0.25 : Math.max(0.12, 1 - T / 9000);
+  for (let s = 0; s < 4; s++) if (R() < 0.0007 * dt * SUB.arr[s] * rain) seedRandom(s, 0.6);
+  if (R() < 0.0005 * dt * SUB.bac * rain) seedRandomBac();
+  if (R() < 0.012 * dt) {
+    const i = (R() * N) | 0, o = i * 4;
+    let best = -1, bv = 0.6;
+    for (let s = 0; s < 4; s++) if (spo[o + s] > bv) { bv = spo[o + s]; best = s; }
+    if (best >= 0 && R() < 0.35) {
+      const gx = i % GW, gy = (i / GW) | 0, ang = R() * TAU, d = 10 + R() * 50;
+      const nx = gx + Math.cos(ang) * d, ny = gy + Math.sin(ang) * d;
+      if (nx > 3 && ny > 3 && nx < GW - 3 && ny < GH - 3) {
+        const j = ((ny | 0) * GW + (nx | 0)) * 4;
+        if (myc[j] + myc[j + 1] + myc[j + 2] + myc[j + 3] < 0.02 && env[j + 2] > 0.3 && env[j + 3] < 0.2) seedColony(best, nx, ny, 5);
+      }
+    }
+  }
+  if (!slimeArrived && T > slimeT) {
+    slimeArrived = true;
+    const rad = Math.min(GW, GH) * (0.18 + R() * 0.08);
+    const gx = rad * 0.6 + R() * (GW - rad * 1.2), gy = rad * 0.6 + R() * (GH - rad * 1.2);
+    spawnSlime(gx, gy, Math.min(MAXP, Math.round(N * 0.11)), rad);
+  }
+}
+function sampleStats() {
+  let m = 0, sp = 0, r = 0, lq = 0, w = 0, ac = 0, bc = 0; const K = 2500;
+  for (let k = 0; k < K; k++) {
+    const i = (R() * N) | 0, o = i * 4;
+    const mt = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+    if (mt > 0.3) m++;
+    if (spo[o] + spo[o + 1] + spo[o + 2] + spo[o + 3] > 0.3) sp++;
+    if (env[o] > 0.35) r++;
+    if (env[o + 1] > 0.62 && env[o] > 0.4) lq++;
+    if (env[o + 3] > 0.2) bc++;
+    w += env[o + 1];
+    ac += (mt + env[o + 3]) * env[o + 2];
+  }
+  stats.myc = m / K; stats.spo = sp / K; stats.rot = r / K; stats.liq = lq / K; stats.wat = w / K; stats.act = ac / K; stats.bac = bc / K;
+}
+
+/* ---------------- lyric engine ---------------- */
+const SPECIES_ORDER = [0, 1, 3, 2];
+let doomSp = [-1, -1], lt = 0, lineNo = -1, curLine = null;
+const maskCanvas = document.createElement('canvas');
+const mctx = maskCanvas.getContext('2d', { willReadFrequently: true });
+function layoutRows(text, ctx) {
+  const words = text.trim().split(/\s+/);
+  ctx.font = `100px ${LYRICS.font}`;
+  const space = ctx.measureText(' ').width, ww = words.map(w => ctx.measureText(w).width);
+  let best = null;
+  for (let rows = 1; rows <= Math.min(LYRICS.maxRows, words.length); rows++) {
+    const total = ww.reduce((a, b) => a + b, 0) + space * (words.length - 1), target = total / rows;
+    const out = []; let cur = [], curW = 0;
+    for (let k = 0; k < words.length; k++) {
+      const add = (cur.length ? space : 0) + ww[k];
+      if (cur.length && curW + add > target * 1.08 && out.length < rows - 1) { out.push([cur.join(' '), curW]); cur = []; curW = 0; }
+      curW += (cur.length ? space : 0) + ww[k]; cur.push(words[k]);
+    }
+    out.push([cur.join(' '), curW]);
+    const widest = Math.max(...out.map(r => r[1]));
+    const size = Math.min(100 * W * 0.86 / widest, H * 0.6 / (out.length * 1.08), H * 0.3);
+    if (!best || size > best.size * 1.04) best = { rows: out.map(r => r[0]), size };
+  }
+  return best;
+}
+function renderMask(text) {
+  const SS = 3;
+  maskCanvas.width = GW * SS; maskCanvas.height = GH * SS;
+  mctx.setTransform(1, 0, 0, 1, 0, 0); mctx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+  mctx.setTransform(GW * SS / W, 0, 0, GH * SS / H, 0, 0);
+  const lay = layoutRows(text, mctx);
+  mctx.font = `${lay.size}px ${LYRICS.font}`;
+  mctx.textAlign = 'center'; mctx.textBaseline = 'middle'; mctx.fillStyle = '#fff';
+  const lh = lay.size * 1.08, n = lay.rows.length;
+  lay.rows.forEach((row, r) => mctx.fillText(row, W / 2, H / 2 + (r - (n - 1) / 2) * lh + lay.size * 0.04));
+  const px = mctx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+  const raw = new Float32Array(N), row = GW * SS * 4;
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    let a = 0;
+    for (let dy = 0; dy < SS; dy++) for (let dx = 0; dx < SS; dx++) a += px[(y * SS + dy) * row + (x * SS + dx) * 4 + 3];
+    raw[y * GW + x] = a / (255 * SS * SS);
+  }
+  // push the outlines around and eat into them so no two letters keep a clean edge
+  const wx = smoothNoise(9, -1, 1), wy = smoothNoise(9, -1, 1), wx2 = smoothNoise(3, -1, 1), wy2 = smoothNoise(3, -1, 1), bite = smoothNoise(4, 0, 1);
+  const mask = new Float32Array(N), Wp = LYRICS.warp;
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const i = y * GW + x;
+    const sx = clamp(Math.round(x + wx[i] * Wp + wx2[i] * Wp * 0.35), 0, GW - 1), sy = clamp(Math.round(y + wy[i] * Wp + wy2[i] * Wp * 0.35), 0, GH - 1);
+    const v = raw[sy * GW + sx], t = 0.25 + 0.45 * bite[i];
+    mask[i] = clamp((v - t) * 3 + 0.5, 0, 1) * (0.75 + 0.25 * bite[i]);
+  }
+  return mask;
+}
+function startLine(n) {
+  const text = LYRICS.lines[n % LYRICS.lines.length];
+  const mask = renderMask(text);
+  const p = SPECIES_ORDER[n % 4], q = SPECIES_ORDER[(n + 2) % 4];
+  if (curLine && !curLine.retired) retireLine(curLine);
+  const floor = LYRICS.spill;
+  for (let i = 0; i < N; i++) {
+    const m = mask[i]; fert[i] = Math.max(fert[i] * 0.6, floor + (1 - floor) * m);
+    if (m > 0.05) {
+      const o = i * 4, nu = 0.85 * m;
+      if (env[o + 2] < nu) env[o + 2] = nu;
+      if (nut0[i] < env[o + 2]) nut0[i] = env[o + 2];
+      if (m > 0.3) aux[o + 3] *= 0.3;
+    }
+  }
+  // inoculation points on a jittered lattice inside the letters, released in a left-to-right sweep
+  const seeds = [];
+  let minX = GW, maxX = 0, area = 0;
+  for (let i = 0; i < N; i++) area += mask[i];
+  const want = Math.round(area / 30);
+  for (let tries = 0; tries < want * 30 && seeds.length < want; tries++) {
+    const jx = 2 + (R() * (GW - 4)) | 0, jy = 2 + (R() * (GH - 4)) | 0, m = mask[jy * GW + jx];
+    if (R() > m * m) { if (R() < 0.004) seeds.push({ x: jx, y: jy, s: SPECIES_ORDER[(R() * 4) | 0], t: 0 }); continue; }
+    const r = R();
+    seeds.push({ x: jx, y: jy, s: r < 0.6 ? p : r < 0.85 ? q : SPECIES_ORDER[(R() * 4) | 0], t: 0 });
+    if (jx < minX) minX = jx; if (jx > maxX) maxX = jx;
+  }
+  if (R() < 0.6 && seeds.length) { const sd = seeds[(R() * seeds.length) | 0]; seedBac(sd.x, sd.y, randomStrain(), 2.5); }
+  const sweep = LYRICS.grow * 0.6;
+  for (const sd of seeds) sd.t = clamp((sd.x - minX) / Math.max(1, maxX - minX), 0, 1) * sweep + (R() - 0.3) * 1.2 + R() * R() * 1.5;
+  seeds.sort((a, b) => a.t - b.t);
+  curLine = { n, mask, sp: [p, q], seeds, ptr: 0, t0: lt };
+}
+function retireLine(line) {
+  line.retired = true;
+  doomSp = line.sp;
+  const cells = [];
+  const [p, q] = line.sp;
+  for (let i = 0; i < N; i++) {
+    const o = i * 4, m = line.mask[i], own = myc[o + p] + myc[o + q];
+    const d = Math.max(m, own > 0.06 ? 0.55 + 0.45 * Math.min(1, own) : 0);
+    if (d > 0.05) { fert[i] = Math.min(fert[i], LYRICS.spill * 0.5); if (doom[i] < d) doom[i] = d; if (m > 0.8) cells.push(i); }
+  }
+  // soft-rot bacteria take hold in a few places inside the dying letters
+  for (let k = 0; k < 7 && cells.length; k++) { const i = cells[(R() * cells.length) | 0]; seedBac(i % GW, (i / GW) | 0, R() < 0.75 ? 0 : 0.5, 2); }
+  // the smell brings a fly
+  if (cells.length && census[K_FLY] < 2 && rnd() < 0.7) { const i = cells[(R() * cells.length) | 0]; spawnFly((i % GW + 0.5) * csx, (((i / GW) | 0) + 0.5) * csy); }
+}
+function lyricClock(dt) {
+  lt += dt;
+  const period = LYRICS.grow + LYRICS.hold + LYRICS.gap;
+  const due = Math.floor((lt - LYRICS.start) / period);
+  if (lt >= LYRICS.start && due > lineNo && (LYRICS.loop || due < LYRICS.lines.length)) { lineNo = due; startLine(due); }
+  if (curLine && !curLine.retired && lt - curLine.t0 >= LYRICS.grow + LYRICS.hold) retireLine(curLine);
+  if (curLine) {
+    const el = lt - curLine.t0, sd = curLine.seeds;
+    while (curLine.ptr < sd.length && sd[curLine.ptr].t <= el) { const q = sd[curLine.ptr++]; seedColony(q.s, q.x + 0.5, q.y + 0.5, 4 + (R() * 4 | 0)); }
+  }
+}
+function stepLyric(dt) {
+  if (!LYRIC_MODE) return;
+  const sA = doomSp[0], sB = doomSp[1];
+  for (let i = 0; i < N; i++) {
+    const o = i * 4, f = fert[i];
+    if (f > 0.3) { const w = env[o + 1], cap = w0[i] + 0.05; if (w > cap) env[o + 1] = w - (w - cap) * Math.min(1, 0.012 * dt * f); }
+    const d = doom[i]; if (d <= 0) continue;
+    const k = d * dt, under = f > 0.5 ? 1 : 0, speedUp = 1 + 4 * under;
+    if (!under) env[o + 2] *= 1 - Math.min(1, 0.0025 * k);
+    for (let s = 0; s < 4; s++) if (s === sA || s === sB || !under) { myc[o + s] *= 1 - Math.min(1, 0.0035 * k * (0.4 + bnoise[i]) * speedUp); spo[o + s] *= 1 - Math.min(1, 0.0024 * k * (0.4 + bnoise[i]) * speedUp); }
+    if (under) aux[o + 3] *= 1 - Math.min(1, 0.02 * dt); else aux[o + 3] = Math.min(1, aux[o + 3] + 0.005 * k);
+    env[o] += (0.9 - env[o]) * Math.min(1, 0.004 * k * (0.4 + bnoise[i]));
+    env[o + 1] = Math.min(1, env[o + 1] + 0.0016 * k * (1 - env[o + 1]));
+    doom[i] = d - 0.0009 * dt;
+    if (doom[i] < 0) doom[i] = 0;
+  }
+}
+
+const sys = [
+  { f: stepLyric, min: 3, max: 3, acc: 0 },
+  { f: stepTips, min: 0.25, max: 1.5, acc: 0 },
+  { f: stepFungi, min: LYRIC_MODE ? 2 : 1, max: LYRIC_MODE ? 4 : 3, acc: 0 },
+  { f: fillGaps, min: LYRIC_MODE ? 6 : 4, max: 6, acc: 0 },
+  { f: stepBacteria, min: 1, max: 3, acc: 0 },
+  { f: stepWater, min: LYRIC_MODE ? 3 : 2, max: LYRIC_MODE ? 3 : 2, acc: 0 },
+  { f: stepSlime, min: 0.5, max: 1.5, acc: 0 },
+  { f: events, min: 1, max: 4, acc: 0 },
+  { f: sampleStats, min: 30, max: 30, acc: 0 },
+];
+function advance(ticks) {
+  T += ticks;
+  for (const s of sys) {
+    s.acc += ticks;
+    let guard = 0;
+    while (s.acc >= s.min && guard++ < 8) { const d = Math.min(s.acc, s.max); s.f(d); s.acc -= d; }
+    if (s.acc > s.max * 3) s.acc = s.max * 3;
+  }
+  dirty.fill(true);
+}
+
+/* =====================================================================
+   Creatures
+   ===================================================================== */
+const bugs = [], parts = [];
+const K_MITE = 0, K_SPRING = 1, K_FLY = 2, K_EGG = 3, K_LARVA = 4, K_PUPA = 5, K_NEMA = 6, K_VELVET = 7;
+const census = new Int32Array(8);
+const pointer = { x: -999, y: -999, down: false };
+
+function cellO(x, y) {
+  let gx = (x / csx) | 0, gy = (y / csy) | 0;
+  if (gx < 0) gx = 0; else if (gx >= GW) gx = GW - 1;
+  if (gy < 0) gy = 0; else if (gy >= GH) gy = GH - 1;
+  return (gy * GW + gx) * 4;
+}
+function foodMite(x, y) { const o = cellO(x, y); return spo[o] + spo[o + 1] + spo[o + 2] + spo[o + 3] + 0.45 * (myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3]) + 0.3 * env[o + 3]; }
+function foodLarva(x, y) { const o = cellO(x, y); return env[o] * 0.7 + env[o + 1] * 0.8 + aux[o] * 0.3 - (myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3]) * 0.1; }
+function edgeSteer(b, margin) {
+  let tx = 0, ty = 0;
+  if (b.x < margin) tx = 1; else if (b.x > W - margin) tx = -1;
+  if (b.y < margin) ty = 1; else if (b.y > H - margin) ty = -1;
+  if (tx || ty) { const want = Math.atan2(ty, tx); let d = want - b.a; d = Math.atan2(Math.sin(d), Math.cos(d)); b.a += d * 0.12; }
+}
+function edgePoint(pad) {
+  const e = rnd() * 4 | 0;
+  if (e === 0) return [-pad, rnd() * H, 0];
+  if (e === 1) return [W + pad, rnd() * H, Math.PI];
+  if (e === 2) return [rnd() * W, -pad, Math.PI / 2];
+  return [rnd() * W, H + pad, -Math.PI / 2];
+}
+function spawnMite(x, y, size, velvet) {
+  bugs.push({ k: velvet ? K_VELVET : K_MITE, x, y, a: rnd() * TAU, size, maxSize: velvet ? 8.5 : 5.2 + rnd() * 1.2,
+    sp: velvet ? 26 : 10 + rnd() * 9, gait: rnd() * 10, pause: 0, age: 0, life: velvet ? 1e9 : 5000 + rnd() * 6000,
+    energy: 0.35, carry: -1, gut: 'rgba(120,88,52,0.55)', moving: true, dead: false, hunt: 0 });
+}
+function spawnMiteEdge(inside) {
+  if (inside) { spawnMite(30 + rnd() * (W - 60), 30 + rnd() * (H - 60), 4.4 + rnd() * 1.1, false); return; }
+  const [x, y, a] = edgePoint(4); spawnMite(x, y, 4.4 + rnd() * 1.1, false); bugs[bugs.length - 1].a = a + (rnd() - 0.5);
+}
+function spawnSpring(x, y, a) {
+  const white = rnd() < 0.6;
+  bugs.push({ k: K_SPRING, x, y, a, len: 11 + rnd() * 5, sp: 9 + rnd() * 8, gait: rnd() * 10, pause: 0, age: 0, life: 7000 + rnd() * 6000,
+    white, z: 0, jump: null, dead: false, moving: true });
+}
+function spawnFly(tx, ty) {
+  const [x, y] = edgePoint(40);
+  if (tx === undefined) {
+    let best = null, bv = -1;
+    for (let k = 0; k < 40; k++) { const px = 40 + rnd() * (W - 80), py = 40 + rnd() * (H - 80); const o = cellO(px, py); const v = env[o] * 0.8 + env[o + 1] + rnd() * 0.2; if (v > bv) { bv = v; best = [px, py]; } }
+    [tx, ty] = best;
+  }
+  bugs.push({ k: K_FLY, x, y, a: Math.atan2(ty - y, tx - x), z: 70 + rnd() * 50, st: 'in', tx, ty, t: 0, len: 22 + rnd() * 3,
+    eggs: 1 + (rnd() * 2 | 0), wing: 0, dash: 0, dashT: 0, gait: 0, walkT: 0, layT: 0, dead: false, groom: 0, vx: 0, vy: 0 });
+}
+function spawnEgg(x, y, a) { bugs.push({ k: K_EGG, x, y, a, hatch: 520 + rnd() * 380, dead: false }); }
+function spawnLarva(x, y, a) {
+  const NS = 10, sp = new Float32Array(NS * 2);
+  for (let i = 0; i < NS; i++) { sp[i * 2] = x - Math.cos(a) * i * 0.5; sp[i * 2 + 1] = y - Math.sin(a) * i * 0.5; }
+  bugs.push({ k: K_LARVA, x, y, a, NS, sp, len: 4, age: 0, ph: rnd() * TAU, pupT: 3600 + rnd() * 1800, dead: false, sub: 0 });
+}
+function spawnNema(x, y) { bugs.push({ k: K_NEMA, x, y, a: rnd() * TAU, len: 18 + rnd() * 13, ph: rnd() * TAU, f: 6 + rnd() * 5, dead: false, age: 0 }); }
+function puff(x, y, rgb, n, spread) {
+  for (let i = 0; i < n && parts.length < 900; i++) {
+    const a = rnd() * TAU, v = (0.3 + rnd()) * spread;
+    parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 2, l: 1.2 + rnd() * 1.6, m: 0, r: rgb[0], g: rgb[1], b: rgb[2], s: 0.6 + rnd() * 0.9 });
+  }
+}
+
+function upMite(b, dt, dT) {
+  b.age += dT;
+  const velvet = b.k === K_VELVET;
+  if (b.pause > 0) { b.pause -= dt; b.moving = false; }
+  else {
+    b.moving = true;
+    const look = 4 + b.size * 1.5;
+    if (velvet) {
+      if (b.hunt <= 0) b.a += (rnd() - 0.5) * 3 * dt;
+    } else {
+      const fl = foodMite(b.x + Math.cos(b.a - 0.7) * look, b.y + Math.sin(b.a - 0.7) * look);
+      const fr = foodMite(b.x + Math.cos(b.a + 0.7) * look, b.y + Math.sin(b.a + 0.7) * look);
+      b.a += clamp((fr - fl) * 3, -2, 2) * dt + (rnd() - 0.5) * 3.2 * dt;
+    }
+    edgeSteer(b, 14);
+    const here = velvet ? 0 : foodMite(b.x, b.y);
+    const v = b.sp * (here > 0.4 ? 0.45 : 1) * (0.7 + 0.3 * Math.sin(b.age * 0.07));
+    b.x += Math.cos(b.a) * v * dt; b.y += Math.sin(b.a) * v * dt;
+    b.gait += v * dt * (velvet ? 0.5 : 1.3);
+    if (rnd() < dt * (velvet ? 0.15 : 0.35)) b.pause = 0.15 + rnd() * (velvet ? 2 : 1.1);
+  }
+  if (velvet) {
+    if (b.hunt > 0) b.hunt -= dt;
+    else for (const m of bugs) {
+      if (m.k !== K_MITE || m.dead) continue;
+      const dx = m.x - b.x, dy = m.y - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < 900) b.a = Math.atan2(dy, dx);
+      if (d2 < (b.size + 3) * (b.size + 3)) { m.dead = true; b.hunt = 4 + rnd() * 4; b.pause = 3; break; }
+    }
+    return;
+  }
+  const o = cellO(b.x, b.y);
+  let eaten = 0, bestS = -1, bestE = 0.0015;
+  const rate = 0.012 * dT * (b.size / 3);
+  const edible = aux[o + 3] < 0.5 ? 1 : 0.1;
+  aux[o + 1] = Math.min(1, aux[o + 1] + 0.00012 * dT);
+  for (let s = 0; s < 4; s++) {
+    const e = Math.min(spo[o + s], rate * edible); spo[o + s] -= e; eaten += e;
+    const em = Math.min(myc[o + s], rate * 0.7); myc[o + s] -= em; eaten += em * 0.5;
+    if (e > bestE) { bestE = e; bestS = s; }
+  }
+  const eb = Math.min(env[o + 3], rate * 0.3); env[o + 3] -= eb; eaten += eb;
+  if (bestS >= 0) { b.carry = bestS; b.gut = SP[bestS].gut; }
+  b.energy += eaten * 2.2 - (eaten > 0.0005 * dT ? 0.00035 : 0.0007) * dT;
+  if (b.size < b.maxSize) b.size += 0.0005 * dT;
+  if (b.energy > 1.7 && census[K_MITE] < 120) {
+    b.energy = 0.45; spawnMite(b.x + (rnd() - 0.5) * 8, b.y + (rnd() - 0.5) * 8, 2.8, false); census[K_MITE]++;
+  }
+  if (b.carry >= 0 && rnd() < 0.0005 * dT) {
+    const mt = myc[o] + myc[o + 1] + myc[o + 2] + myc[o + 3];
+    if (mt < 0.01 && env[o + 2] > 0.3 && env[o + 3] < 0.2) { seedColony(b.carry, b.x / csx, b.y / csy, 5); b.carry = -1; }
+  }
+  if (b.age > b.life || b.energy < -0.6) b.dead = true;
+}
+function upSpring(b, dt, dT) {
+  b.age += dT;
+  if (b.jump) {
+    const j = b.jump; j.t += dt / j.dur;
+    const t = Math.min(1, j.t);
+    b.x = j.x0 + (j.x1 - j.x0) * t; b.y = j.y0 + (j.y1 - j.y0) * t;
+    b.z = 4 * j.h * t * (1 - t); b.a += j.spin * dt;
+    if (t >= 1) { b.jump = null; b.z = 0; b.pause = 0.3 + rnd() * 0.8; const o = cellO(b.x, b.y); spoPuff(b.x, b.y, o, 6); }
+    return;
+  }
+  const dxp = pointer.x - b.x, dyp = pointer.y - b.y;
+  const startled = dxp * dxp + dyp * dyp < 1600;
+  let crowd = false;
+  if (rnd() < dt * 0.5) for (const m of bugs) { if (m !== b && m.k !== K_EGG && m.k !== K_PUPA && Math.abs(m.x - b.x) < 6 && Math.abs(m.y - b.y) < 6) { crowd = true; break; } }
+  if (startled || crowd || rnd() < dt * 0.06) {
+    const ang = startled ? Math.atan2(-dyp, -dxp) + (rnd() - 0.5) : rnd() * TAU, d = 30 + rnd() * 70;
+    let x1 = clamp(b.x + Math.cos(ang) * d, 10, W - 10), y1 = clamp(b.y + Math.sin(ang) * d, 10, H - 10);
+    b.jump = { t: 0, dur: 0.28 + rnd() * 0.2, x0: b.x, y0: b.y, x1, y1, h: 14 + rnd() * 20, spin: (rnd() - 0.5) * 30 };
+    const o = cellO(b.x, b.y); spoPuff(b.x, b.y, o, 10);
+    return;
+  }
+  if (b.pause > 0) { b.pause -= dt; b.moving = false; }
+  else {
+    b.moving = true;
+    const look = 8;
+    const fl = foodMite(b.x + Math.cos(b.a - 0.6) * look, b.y + Math.sin(b.a - 0.6) * look);
+    const fr = foodMite(b.x + Math.cos(b.a + 0.6) * look, b.y + Math.sin(b.a + 0.6) * look);
+    b.a += clamp((fr - fl) * 2, -2, 2) * dt + (rnd() - 0.5) * 2.4 * dt;
+    edgeSteer(b, 16);
+    b.x += Math.cos(b.a) * b.sp * dt; b.y += Math.sin(b.a) * b.sp * dt;
+    b.gait += b.sp * dt * 1.2;
+    if (rnd() < dt * 0.3) b.pause = 0.3 + rnd() * 1.5;
+  }
+  const o = cellO(b.x, b.y);
+  for (let s = 0; s < 4; s++) { myc[o + s] = Math.max(0, myc[o + s] - 0.004 * dT); spo[o + s] = Math.max(0, spo[o + s] - 0.004 * dT); }
+  if (b.age > b.life) b.dead = true;
+}
+function spoPuff(x, y, o, n) {
+  let best = -1, bv = 0.25;
+  for (let s = 0; s < 4; s++) if (spo[o + s] > bv) { bv = spo[o + s]; best = s; }
+  if (best >= 0) puff(x, y, SP[best].puff, Math.round(n * bv), 9);
+}
+function upFly(b, dt, dT) {
+  b.wing += dt * 60;
+  const dxp = pointer.x - b.x, dyp = pointer.y - b.y;
+  const near = dxp * dxp + dyp * dyp < 3600;
+  if (b.st === 'in') {
+    const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy);
+    const want = Math.atan2(dy, dx) + Math.sin(b.wing * 0.05) * 0.5;
+    let da = want - b.a; da = Math.atan2(Math.sin(da), Math.cos(da)); b.a += da * Math.min(1, 4 * dt);
+    const v = Math.min(170, 40 + d * 1.2);
+    b.x += Math.cos(b.a) * v * dt; b.y += Math.sin(b.a) * v * dt;
+    b.z = Math.max(0, Math.min(b.z, d * 0.35));
+    if (d < 3) {
+      b.st = 'walk'; b.z = 0; b.t = 0; b.walkT = 6 + rnd() * 10;
+      const o = cellO(b.x, b.y);
+      if (rnd() < 0.5) seedBac(b.x / csx, b.y / csy, randomStrain(), 1.6);
+      spoPuff(b.x, b.y, o, 14);
+    }
+  } else if (b.st === 'walk' || b.st === 'lay') {
+    b.t += dt;
+    if (near && b.st === 'walk') { b.st = 'off'; b.vz = 30; }
+    else if (b.st === 'lay') {
+      b.layT -= dt;
+      if (rnd() < dt * 7 && census[K_LARVA] + census[K_EGG] < 110) {
+        const bx = b.x - Math.cos(b.a) * b.len * 0.42 + (rnd() - 0.5) * 3, by = b.y - Math.sin(b.a) * b.len * 0.42 + (rnd() - 0.5) * 3;
+        spawnEgg(bx, by, b.a + (rnd() - 0.5) * 1.2); census[K_EGG]++;
+      }
+      if (b.layT <= 0) { b.eggs--; b.st = 'walk'; b.t = 0; }
+    } else {
+      if (b.dash > 0) {
+        b.dash -= dt; const v = 46;
+        b.x += Math.cos(b.a) * v * dt; b.y += Math.sin(b.a) * v * dt; b.gait += v * dt * 0.8;
+      } else {
+        b.dashT -= dt;
+        b.groom = Math.max(0, b.groom - dt);
+        if (b.dashT <= 0) {
+          let best = b.a, bv = -1;
+          for (let k = 0; k < 5; k++) { const a = b.a + (rnd() - 0.5) * 2.4; const v = foodLarva(b.x + Math.cos(a) * 14, b.y + Math.sin(a) * 14) + rnd() * 0.1; if (v > bv) { bv = v; best = a; } }
+          b.a = best; b.dash = 0.12 + rnd() * 0.35; b.dashT = 0.3 + rnd() * 1.4;
+          if (rnd() < 0.25) b.groom = 0.8 + rnd();
+        }
+        edgeSteer(b, 30);
+      }
+      const o = cellO(b.x, b.y);
+      if (b.eggs > 0 && b.t > 1.5 && env[o] > 0.25 && (env[o + 1] > 0.12 || env[o + 3] > 0.2) && rnd() < dt * 0.4) { b.st = 'lay'; b.layT = 2 + rnd() * 2.5; }
+      if (b.t > b.walkT || (b.eggs <= 0 && b.t > 2)) { b.st = 'off'; b.vz = 30; }
+    }
+  } else if (b.st === 'off') {
+    b.z += dt * 60; b.a += Math.sin(b.wing * 0.04) * dt * 1.5;
+    const v = Math.min(220, 30 + b.z * 2.5);
+    b.x += Math.cos(b.a) * v * dt; b.y += Math.sin(b.a) * v * dt;
+    if (b.x < -80 || b.y < -80 || b.x > W + 80 || b.y > H + 80) b.dead = true;
+  }
+}
+function upLarva(b, dt, dT) {
+  b.age += dT;
+  b.len = 5 + 25 * Math.min(1, b.age / 2600);
+  b.ph += dt * 3.6;
+  const push = Math.max(0, Math.sin(b.ph)); const v = (5 + b.len * 0.3) * push * push;
+  const look = 6 + b.len * 0.3;
+  const hx = b.sp[0], hy = b.sp[1];
+  const fl = foodLarva(hx + Math.cos(b.a - 0.6) * look, hy + Math.sin(b.a - 0.6) * look);
+  const fr = foodLarva(hx + Math.cos(b.a + 0.6) * look, hy + Math.sin(b.a + 0.6) * look);
+  b.a += clamp((fr - fl) * 2.5, -1.5, 1.5) * dt + (rnd() - 0.5) * 2.2 * dt;
+  if (larvaMass.n > 2) {
+    const want = Math.atan2(larvaMass.y - hy, larvaMass.x - hx); let d = want - b.a; d = Math.atan2(Math.sin(d), Math.cos(d));
+    b.a += d * 0.25 * dt;
+  }
+  b.x = hx; b.y = hy; edgeSteer(b, 20);
+  b.sp[0] = hx + Math.cos(b.a) * v * dt; b.sp[1] = hy + Math.sin(b.a) * v * dt;
+  const seg = b.len / (b.NS - 1);
+  for (let i = 1; i < b.NS; i++) {
+    const px = b.sp[(i - 1) * 2], py = b.sp[(i - 1) * 2 + 1];
+    let dx = b.sp[i * 2] - px, dy = b.sp[i * 2 + 1] - py; const d = Math.hypot(dx, dy) || 1;
+    const L = seg * (1 + 0.16 * Math.sin(b.ph - i * 0.8));
+    b.sp[i * 2] = px + dx / d * L; b.sp[i * 2 + 1] = py + dy / d * L;
+  }
+  const o = cellO(b.sp[0], b.sp[1]);
+  const k = dT * (0.4 + b.len / 30);
+  env[o] = Math.min(1, env[o] + 0.003 * k);
+  env[o + 1] = Math.min(1, env[o + 1] + 0.0022 * k);
+  env[o + 2] = Math.max(0, env[o + 2] - 0.002 * k);
+  aux[o] = Math.min(1, aux[o] + 0.0016 * k);
+  for (let s = 0; s < 4; s++) { myc[o + s] *= 1 - Math.min(0.5, 0.03 * k); spo[o + s] *= 1 - Math.min(0.5, 0.03 * k); }
+  const ot = cellO(b.sp[(b.NS - 1) * 2], b.sp[(b.NS - 1) * 2 + 1]);
+  aux[ot + 1] = Math.min(1, aux[ot + 1] + 0.0007 * k);
+  b.sub = clamp((env[o] - 0.6) * 2.5, 0, 1) * clamp((env[o + 1] - 0.35) * 3, 0, 1);
+  if (b.age > b.pupT) {
+    b.dead = true;
+    const m = Math.floor(b.NS / 2);
+    bugs.push({ k: K_PUPA, x: b.sp[m * 2], y: b.sp[m * 2 + 1], a: Math.atan2(b.sp[1] - b.sp[(b.NS - 1) * 2 + 1], b.sp[0] - b.sp[(b.NS - 1) * 2]), len: b.len * 0.62, age: 0, emerge: 2200 + rnd() * 1200, empty: false, dead: false });
+  }
+}
+function upPupa(b, dt, dT) {
+  b.age += dT;
+  if (!b.empty && b.age > b.emerge) {
+    b.empty = true;
+    if (census[K_FLY] < 4) { spawnFly(b.x, b.y); const f = bugs[bugs.length - 1]; f.x = b.x; f.y = b.y; f.z = 0; f.st = 'walk'; f.t = 0; f.walkT = 3 + rnd() * 4; f.eggs = rnd() < 0.5 ? 1 : 0; f.a = b.a; }
+  }
+}
+function upNema(b, dt, dT) {
+  b.age += dT; b.ph += dt * b.f;
+  const o = cellO(b.x, b.y);
+  if (env[o + 1] < 0.5) { b.dryT = (b.dryT || 0) + dt; if (b.dryT > 3) b.dead = true; return; }
+  b.dryT = 0;
+  b.a += (rnd() - 0.5) * 1.6 * dt;
+  const ahead = cellO(b.x + Math.cos(b.a) * 8, b.y + Math.sin(b.a) * 8);
+  if (env[ahead + 1] < 0.55) b.a += Math.PI * 0.6 * dt * 4;
+  b.x += Math.cos(b.a) * 4 * dt; b.y += Math.sin(b.a) * 4 * dt;
+  if (b.age > 9000) b.dead = true;
+}
+const larvaMass = { x: 0, y: 0, n: 0 };
+function updateBugs(dt, dT) {
+  census.fill(0);
+  let lx = 0, ly = 0, ln = 0;
+  for (const b of bugs) { census[b.k]++; if (b.k === K_LARVA) { lx += b.x; ly += b.y; ln++; } }
+  larvaMass.n = ln; if (ln) { larvaMass.x = lx / ln; larvaMass.y = ly / ln; }
+  const mdt = Math.min(dt, 0.05);
+  for (const b of bugs) {
+    if (b.dead) continue;
+    switch (b.k) {
+      case K_MITE: case K_VELVET: upMite(b, mdt, dT); break;
+      case K_SPRING: upSpring(b, mdt, dT); break;
+      case K_FLY: upFly(b, mdt, dT); break;
+      case K_EGG: b.hatch -= dT; if (b.hatch <= 0) { b.dead = true; if (census[K_LARVA] < 90) spawnLarva(b.x, b.y, b.a); } break;
+      case K_LARVA: upLarva(b, mdt, dT); break;
+      case K_PUPA: upPupa(b, mdt, dT); break;
+      case K_NEMA: upNema(b, mdt, dT); break;
+    }
+  }
+  for (let i = bugs.length - 1; i >= 0; i--) if (bugs[i].dead) bugs.splice(i, 1);
+  // arrivals
+  if (census[K_MITE] < 5 + stats.spo * 110 && rnd() < 0.006 * dT) spawnMiteEdge(false);
+  if (T > 900 && census[K_SPRING] < 3 + stats.myc * 16 && rnd() < 0.0012 * dT) { const [x, y, a] = edgePoint(4); spawnSpring(x, y, a); }
+  if (census[K_FLY] < 2 && stats.rot > 0.06 && SUB.id !== 3 && rnd() < 0.0009 * dT * Math.min(1, stats.rot * 3)) spawnFly();
+  if (T > 2600 && census[K_VELVET] < 1 && rnd() < 0.00012 * dT) { const [x, y, a] = edgePoint(6); spawnMite(x, y, 7.2, true); bugs[bugs.length - 1].a = a; }
+  if (census[K_NEMA] < Math.min(70, stats.liq * 400) && rnd() < 0.03 * dT) {
+    for (let t = 0; t < 12; t++) { const x = rnd() * W, y = rnd() * H, o = cellO(x, y); if (env[o + 1] > 0.68 && env[o] > 0.45) { spawnNema(x, y); break; } }
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.m += dt; p.vx *= 0.95; p.vy = p.vy * 0.95 + 0.6 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt; if (p.m > p.l) parts.splice(i, 1);
+  }
+}
+
+/* ---------------- drawing ---------------- */
+const LX = 0.62, LY = 0.72; // shadow direction (screen, y down): light from upper left
+function drawMite(b) {
+  const s = b.size, c = fx, velvet = b.k === K_VELVET;
+  c.fillStyle = 'rgba(14,7,0,0.3)';
+  c.beginPath(); c.ellipse(b.x + s * LX * 0.8, b.y + s * LY * 0.8, s * 1.2, s * 0.85, b.a, 0, TAU); c.fill();
+  c.save(); c.translate(b.x, b.y); c.rotate(b.a);
+  const mv = b.moving ? 1 : 0.15;
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  c.strokeStyle = velvet ? 'rgba(140,22,18,0.95)' : 'rgba(150,118,80,0.9)';
+  c.lineWidth = Math.max(0.35, s * (velvet ? 0.15 : 0.12));
+  c.beginPath();
+  for (let k = 0; k < 4; k++) {
+    const ax = s * (0.5 - k * 0.32), base = [0.65, 1.25, 1.95, 2.5][k];
+    for (let side = -1; side <= 1; side += 2) {
+      const ph = b.gait + k * 1.6 + (side > 0 ? Math.PI : 0);
+      const ang = side * (base + Math.sin(ph) * 0.3 * mv);
+      const l1 = s * (k === 0 ? 0.9 : 0.7), l2 = s * (k === 0 ? 1.05 : 0.85), ay = side * s * 0.45;
+      const kx = ax + Math.cos(ang) * l1, ky = ay + Math.sin(ang) * l1;
+      const bend = side * (k < 2 ? -0.5 : 0.5) + Math.cos(ph) * 0.15 * mv;
+      c.moveTo(ax, ay); c.lineTo(kx, ky); c.lineTo(kx + Math.cos(ang + bend) * l2, ky + Math.sin(ang + bend) * l2);
+    }
+  }
+  c.stroke();
+  if (!velvet) {
+    c.strokeStyle = 'rgba(246,240,226,0.5)'; c.lineWidth = 0.3; c.beginPath();
+    c.moveTo(-s * 0.9, s * 0.22); c.lineTo(-s * 2.5, s * 0.7);
+    c.moveTo(-s * 0.9, -s * 0.22); c.lineTo(-s * 2.5, -s * 0.7);
+    c.moveTo(-s * 0.6, s * 0.52); c.lineTo(-s * 1.7, s * 1.35);
+    c.moveTo(-s * 0.6, -s * 0.52); c.lineTo(-s * 1.7, -s * 1.35);
+    c.moveTo(s * 0.35, s * 0.6); c.lineTo(s * 0.15, s * 1.5);
+    c.moveTo(s * 0.35, -s * 0.6); c.lineTo(s * 0.15, -s * 1.5);
+    c.stroke();
+  }
+  if (velvet) { c.shadowColor = 'rgba(200,30,20,0.9)'; c.shadowBlur = 2.5 * BD; }
+  c.fillStyle = velvet ? '#b3221a' : 'rgba(241,234,216,0.93)';
+  c.beginPath(); c.ellipse(-s * 0.1, 0, s, s * (velvet ? 0.8 : 0.72), 0, 0, TAU); c.fill();
+  if (!velvet) { c.strokeStyle = 'rgba(105,82,55,0.55)'; c.lineWidth = 0.45; c.stroke(); }
+  c.shadowBlur = 0;
+  c.fillStyle = velvet ? '#7a120d' : 'rgba(176,124,82,0.9)';
+  c.beginPath(); c.ellipse(s * 0.95, 0, s * 0.26, s * 0.2, 0, 0, TAU); c.fill();
+  if (!velvet) {
+    c.strokeStyle = 'rgba(120,100,70,0.35)'; c.lineWidth = 0.35;
+    c.beginPath(); c.moveTo(s * 0.38, -s * 0.62); c.quadraticCurveTo(s * 0.26, 0, s * 0.38, s * 0.62); c.stroke();
+    c.fillStyle = b.gut; c.beginPath(); c.ellipse(-s * 0.28, 0, s * 0.5, s * 0.4, 0, 0, TAU); c.fill();
+  } else {
+    c.fillStyle = 'rgba(255,120,100,0.25)';
+    for (let k = 0; k < 14; k++) { const a = k / 14 * TAU; c.fillRect(-s * 0.1 + Math.cos(a) * s * 0.8 - 0.3, Math.sin(a) * s * 0.65 - 0.3, 0.6, 0.6); }
+  }
+  c.restore();
+  c.fillStyle = velvet ? 'rgba(255,170,150,0.45)' : 'rgba(255,255,250,0.62)';
+  c.beginPath(); c.ellipse(b.x - s * 0.35, b.y - s * 0.32, s * 0.33, s * 0.18, -0.7, 0, TAU); c.fill();
+}
+function drawSpring(b) {
+  const L = b.len, z = b.z, sc = 1 + z * 0.02, c = fx;
+  const sa = Math.max(0.07, 0.3 - z * 0.006);
+  c.fillStyle = `rgba(14,7,0,${sa})`;
+  c.beginPath(); c.ellipse(b.x + (1 + z) * LX, b.y + (1 + z) * LY, L * 0.5 * sc, L * 0.16 * sc + z * 0.05, b.a, 0, TAU); c.fill();
+  c.save(); c.translate(b.x, b.y - z * 0.25); c.rotate(b.a); c.scale(sc, sc);
+  const body = b.white ? [234, 234, 226] : [64, 70, 88], edge = b.white ? 'rgba(150,150,140,0.5)' : 'rgba(25,28,40,0.7)';
+  if (z < 1) {
+    c.strokeStyle = b.white ? 'rgba(220,218,205,0.85)' : 'rgba(50,54,66,0.9)'; c.lineWidth = 0.42; c.lineCap = 'round'; c.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const ax = L * (0.2 - k * 0.1);
+      for (let side = -1; side <= 1; side += 2) {
+        const ang = side * (1.15 + k * 0.38 + Math.sin(b.gait + k * 2 + side) * 0.3 * (b.moving ? 1 : 0.1));
+        c.moveTo(ax, side * L * 0.07); c.lineTo(ax + Math.cos(ang) * L * 0.17, side * L * 0.07 + Math.sin(ang) * L * 0.17);
+      }
+    }
+    c.stroke();
+  }
+  c.strokeStyle = b.white ? 'rgba(225,222,210,0.9)' : 'rgba(60,64,80,0.95)'; c.lineWidth = 0.5; c.beginPath();
+  for (let side = -1; side <= 1; side += 2) {
+    const w = Math.sin(b.gait * 0.6 + side) * 0.12;
+    c.moveTo(L * 0.42, side * L * 0.04); c.lineTo(L * 0.52, side * L * (0.1 + w * 0.5)); c.lineTo(L * 0.62, side * L * (0.16 + w)); c.lineTo(L * 0.7, side * L * (0.2 + w));
+  }
+  c.stroke();
+  for (let k = 0; k < 7; k++) {
+    const t = k / 6, sx = L * (0.36 - t * 0.76), rw = L * (k === 0 ? 0.095 : 0.125 - t * 0.04);
+    const sh = 1 - t * 0.15 - (k % 2) * 0.05;
+    c.fillStyle = `rgb(${body[0] * sh | 0},${body[1] * sh | 0},${body[2] * sh | 0})`;
+    c.beginPath(); c.ellipse(sx, 0, L * (k === 0 ? 0.09 : 0.08), rw, 0, 0, TAU); c.fill();
+  }
+  c.strokeStyle = edge; c.lineWidth = 0.3; c.beginPath();
+  for (let k = 1; k < 7; k++) { const sx = L * (0.36 - k / 6 * 0.76) + L * 0.05; c.moveTo(sx, -L * 0.1); c.lineTo(sx, L * 0.1); }
+  c.stroke();
+  if (!b.white) { c.fillStyle = 'rgba(140,170,255,0.18)'; c.beginPath(); c.ellipse(-L * 0.05, -L * 0.05, L * 0.3, L * 0.04, 0, 0, TAU); c.fill(); }
+  c.fillStyle = b.white ? 'rgba(20,20,20,0.85)' : 'rgba(10,10,14,0.9)';
+  c.beginPath(); c.arc(L * 0.42, -L * 0.06, 0.45, 0, TAU); c.arc(L * 0.42, L * 0.06, 0.45, 0, TAU); c.fill();
+  c.restore();
+}
+function drawFly(b) {
+  const L = b.len, z = b.z, c = fx, flying = z > 0.5 || b.st === 'in' || b.st === 'off';
+  const sc = 1 + Math.min(z, 140) * 0.006;
+  const sOff = 1.5 + z * 0.9, sAlpha = Math.max(0.05, 0.3 - z * 0.0022), sBlur = 1 + z * 0.06;
+  c.save();
+  c.fillStyle = `rgba(14,7,0,${sAlpha})`;
+  for (let k = 0; k < 3; k++) { c.beginPath(); c.ellipse(b.x + sOff * LX, b.y + sOff * LY, L * 0.42 * sc + sBlur * k, L * 0.16 * sc + sBlur * k, b.a, 0, TAU); c.fill(); }
+  c.translate(b.x, b.y - z * 0.1); c.rotate(b.a); c.scale(sc, sc);
+  c.lineCap = 'round';
+  if (!flying) {
+    c.strokeStyle = 'rgba(62,40,24,0.9)'; c.lineWidth = 0.5; c.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const ax = L * (0.18 - k * 0.07);
+      for (let side = -1; side <= 1; side += 2) {
+        const tri = ((k % 2) ^ (side > 0 ? 1 : 0)) ? 1 : -1;
+        const sw = b.dash > 0 ? Math.sin(b.gait * 3) * tri * 0.25 : (b.groom > 0 && k === 0 ? Math.sin(b.t * 30) * 0.4 : 0);
+        const base = [0.7, 1.45, 2.2][k];
+        const ang = side * (base + sw);
+        const kx = ax + Math.cos(ang) * L * 0.2, ky = side * L * 0.05 + Math.sin(ang) * L * 0.2;
+        const ang2 = ang + side * (k === 0 ? -0.5 : k === 1 ? 0.1 : 0.45);
+        c.moveTo(ax, side * L * 0.05); c.lineTo(kx, ky); c.lineTo(kx + Math.cos(ang2) * L * 0.24, ky + Math.sin(ang2) * L * 0.24);
+      }
+    }
+    c.stroke();
+  }
+  c.fillStyle = '#b48e58';
+  c.beginPath(); c.ellipse(-L * 0.2, 0, L * 0.25, L * 0.155, 0, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(52,32,18,0.75)'; c.lineWidth = L * 0.035;
+  for (let k = 0; k < 4; k++) { const sx = -L * (0.08 + k * 0.085); const r = L * 0.15 * Math.sqrt(Math.max(0, 1 - Math.pow((sx + L * 0.2) / (L * 0.25), 2))); c.beginPath(); c.moveTo(sx, -r); c.quadraticCurveTo(sx - L * 0.03, 0, sx, r); c.stroke(); }
+  c.fillStyle = '#9c7444';
+  c.beginPath(); c.ellipse(L * 0.11, 0, L * 0.16, L * 0.135, 0, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(30,18,8,0.8)'; c.lineWidth = 0.35; c.beginPath();
+  for (let k = 0; k < 6; k++) { const bx = L * (0.02 + (k % 3) * 0.07), by = (k < 3 ? -1 : 1) * L * 0.06; c.moveTo(bx, by); c.lineTo(bx - L * 0.08, by * 1.5); }
+  c.stroke();
+  c.fillStyle = '#a07a4a'; c.beginPath(); c.ellipse(L * 0.3, 0, L * 0.085, L * 0.13, 0, 0, TAU); c.fill();
+  c.fillStyle = '#b3241b';
+  c.beginPath(); c.ellipse(L * 0.3, -L * 0.085, L * 0.075, L * 0.06, 0.2, 0, TAU); c.fill();
+  c.beginPath(); c.ellipse(L * 0.3, L * 0.085, L * 0.075, L * 0.06, -0.2, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(255,200,190,0.55)';
+  c.beginPath(); c.arc(L * 0.28, -L * 0.1, L * 0.022, 0, TAU); c.arc(L * 0.28, L * 0.07, L * 0.022, 0, TAU); c.fill();
+  if (flying) {
+    const flap = Math.sin(b.wing) * 0.5;
+    for (let side = -1; side <= 1; side += 2) {
+      for (let k = 0; k < 4; k++) {
+        const ang = side * (1.25 + flap * 0.6 + (k - 1.5) * 0.28);
+        c.fillStyle = 'rgba(215,222,235,0.09)';
+        c.beginPath(); c.ellipse(L * 0.08 + Math.cos(ang) * L * 0.36, Math.sin(ang) * L * 0.36, L * 0.38, L * 0.12, ang, 0, TAU); c.fill();
+      }
+    }
+  } else {
+    for (let side = -1; side <= 1; side += 2) {
+      c.save(); c.translate(L * 0.06, side * L * 0.04); c.rotate(Math.PI + side * -0.2);
+      c.fillStyle = 'rgba(220,226,238,0.26)'; c.strokeStyle = 'rgba(70,58,46,0.45)'; c.lineWidth = 0.35;
+      c.beginPath(); c.ellipse(L * 0.36, 0, L * 0.4, L * 0.13, 0, 0, TAU); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(0, 0); c.lineTo(L * 0.76, -L * 0.02); c.moveTo(L * 0.05, L * 0.04); c.lineTo(L * 0.7, L * 0.07); c.moveTo(L * 0.05, -L * 0.04); c.lineTo(L * 0.66, -L * 0.08); c.moveTo(L * 0.38, -L * 0.06); c.lineTo(L * 0.42, L * 0.06); c.stroke();
+      c.fillStyle = 'rgba(180,200,255,0.12)'; c.beginPath(); c.ellipse(L * 0.45, side * -L * 0.02, L * 0.2, L * 0.04, 0, 0, TAU); c.fill();
+      c.restore();
+    }
+  }
+  c.restore();
+  c.fillStyle = 'rgba(255,250,235,0.35)';
+  c.beginPath(); c.ellipse(b.x - L * 0.06 * sc, b.y - L * 0.06 * sc - z * 0.1, L * 0.08 * sc, L * 0.04 * sc, -0.7, 0, TAU); c.fill();
+}
+function drawEgg(b) {
+  const c = fx;
+  c.save(); c.translate(b.x, b.y); c.rotate(b.a); c.scale(1.4, 1.4);
+  c.fillStyle = 'rgba(14,7,0,0.25)'; c.beginPath(); c.ellipse(0.5, 0.6, 1.25, 0.6, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(252,250,240,0.96)'; c.beginPath(); c.ellipse(0, 0, 1.2, 0.52, 0, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(250,248,235,0.7)'; c.lineWidth = 0.22; c.beginPath();
+  c.moveTo(1.1, -0.15); c.lineTo(2.3, -0.55); c.moveTo(1.1, 0.15); c.lineTo(2.3, 0.55); c.stroke();
+  c.restore();
+}
+function larvaPath(b, ox, oy, wmul) {
+  const NS = b.NS, sp = b.sp, c = fx, L = [], Rr = [];
+  for (let i = 0; i < NS; i++) {
+    const t = i / (NS - 1);
+    const prof = t < 0.3 ? 0.32 + 2.27 * t : 1 - 0.18 * Math.pow((t - 0.3) / 0.7, 2);
+    const w = b.len * 0.14 * prof * wmul;
+    const i0 = Math.max(0, i - 1), i1 = Math.min(NS - 1, i + 1);
+    let tx = sp[i0 * 2] - sp[i1 * 2], ty = sp[i0 * 2 + 1] - sp[i1 * 2 + 1]; const d = Math.hypot(tx, ty) || 1; tx /= d; ty /= d;
+    L.push([sp[i * 2] - ty * w + ox, sp[i * 2 + 1] + tx * w + oy]); Rr.push([sp[i * 2] + ty * w + ox, sp[i * 2 + 1] - tx * w + oy]);
+  }
+  c.beginPath(); c.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < NS; i++) c.lineTo(L[i][0], L[i][1]);
+  const tx = sp[(NS - 1) * 2] + ox, ty = sp[(NS - 1) * 2 + 1] + oy;
+  c.quadraticCurveTo(tx + (tx - sp[(NS - 2) * 2] - ox) * 0.6, ty + (ty - sp[(NS - 2) * 2 + 1] - oy) * 0.6, Rr[NS - 1][0], Rr[NS - 1][1]);
+  for (let i = NS - 2; i >= 0; i--) c.lineTo(Rr[i][0], Rr[i][1]);
+  c.closePath();
+  return [L, Rr];
+}
+function drawLarva(b) {
+  const c = fx, sub = b.sub, NS = b.NS, sp = b.sp;
+  c.fillStyle = `rgba(14,7,0,${0.28 * (1 - sub * 0.7)})`; larvaPath(b, 1.0, 1.3, 1.05); c.fill();
+  const a = 0.95 - sub * 0.45;
+  c.fillStyle = `rgba(${236 - sub * 50 | 0},${228 - sub * 70 | 0},${204 - sub * 90 | 0},${a})`;
+  const [Lp] = larvaPath(b, 0, 0, 1); c.fill();
+  c.strokeStyle = `rgba(150,128,96,${0.4 * a})`; c.lineWidth = 0.4; c.stroke();
+  c.strokeStyle = `rgba(160,135,100,${0.35 * a})`; c.lineWidth = 0.3; c.beginPath();
+  for (let i = 1; i < NS - 1; i++) {
+    const t = i / (NS - 1), prof = t < 0.3 ? 0.32 + 2.27 * t : 1 - 0.18 * Math.pow((t - 0.3) / 0.7, 2), w = b.len * 0.14 * prof;
+    let tx = sp[(i - 1) * 2] - sp[(i + 1) * 2], ty = sp[(i - 1) * 2 + 1] - sp[(i + 1) * 2 + 1]; const d = Math.hypot(tx, ty) || 1; tx /= d; ty /= d;
+    c.moveTo(sp[i * 2] - ty * w * 0.9, sp[i * 2 + 1] + tx * w * 0.9); c.lineTo(sp[i * 2] + ty * w * 0.9, sp[i * 2 + 1] - tx * w * 0.9);
+  }
+  c.stroke();
+  c.strokeStyle = `rgba(78,50,28,${0.45 * a})`; c.lineWidth = Math.max(0.5, b.len * 0.05); c.beginPath();
+  c.moveTo(sp[2], sp[3]); for (let i = 2; i < NS - 2; i++) c.lineTo(sp[i * 2], sp[i * 2 + 1]); c.stroke();
+  c.strokeStyle = `rgba(255,255,250,${0.5 * a})`; c.lineWidth = 0.55; c.beginPath();
+  c.moveTo(Lp[1][0] * 0.6 + sp[2] * 0.4 - 0.3, Lp[1][1] * 0.6 + sp[3] * 0.4 - 0.4);
+  for (let i = 2; i < NS - 1; i++) c.lineTo(Lp[i][0] * 0.6 + sp[i * 2] * 0.4 - 0.3, Lp[i][1] * 0.6 + sp[i * 2 + 1] * 0.4 - 0.4);
+  c.stroke();
+  const hx = sp[0], hy = sp[1], ha = Math.atan2(sp[1] - sp[3], sp[0] - sp[2]);
+  c.strokeStyle = `rgba(10,8,6,${0.9 * a})`; c.lineWidth = 0.45; c.beginPath();
+  c.moveTo(hx - Math.cos(ha) * 1.2 + Math.sin(ha) * 0.3, hy - Math.sin(ha) * 1.2 - Math.cos(ha) * 0.3); c.lineTo(hx + Math.cos(ha) * 0.3, hy + Math.sin(ha) * 0.3);
+  c.moveTo(hx - Math.cos(ha) * 1.2 - Math.sin(ha) * 0.3, hy - Math.sin(ha) * 1.2 + Math.cos(ha) * 0.3); c.lineTo(hx + Math.cos(ha) * 0.3, hy + Math.sin(ha) * 0.3);
+  c.stroke();
+  const tx = sp[(NS - 1) * 2], ty = sp[(NS - 1) * 2 + 1];
+  c.fillStyle = `rgba(90,60,30,${0.6 * a})`; c.beginPath(); c.arc(tx - Math.cos(ha) * 0.6, ty - Math.sin(ha) * 0.6, 0.55, 0, TAU); c.fill();
+}
+function drawPupa(b) {
+  const c = fx, L = b.len, t = Math.min(1, b.age / 700);
+  c.save(); c.translate(b.x, b.y); c.rotate(b.a);
+  c.fillStyle = 'rgba(14,7,0,0.3)'; c.beginPath(); c.ellipse(LX * 1.2, LY * 1.2, L * 0.52, L * 0.21, 0, 0, TAU); c.fill();
+  const r = Math.round(220 - 120 * t), g = Math.round(200 - 140 * t), bl = Math.round(160 - 125 * t);
+  c.fillStyle = b.empty ? `rgba(${r + 30},${g + 20},${bl + 10},0.75)` : `rgb(${r},${g},${bl})`;
+  c.beginPath(); c.ellipse(0, 0, L * 0.5, L * 0.2, 0, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(30,15,5,0.4)'; c.lineWidth = 0.35; c.beginPath();
+  for (let k = -3; k <= 3; k++) { const sx = k * L * 0.12; const h = L * 0.2 * Math.sqrt(Math.max(0, 1 - Math.pow(sx / (L * 0.5), 2))); c.moveTo(sx, -h); c.lineTo(sx, h); }
+  c.stroke();
+  if (b.empty) { c.fillStyle = 'rgba(20,10,4,0.75)'; c.beginPath(); c.ellipse(L * 0.42, 0, L * 0.09, L * 0.13, 0, 0, TAU); c.fill(); }
+  c.fillStyle = 'rgba(255,230,200,0.35)'; c.beginPath(); c.ellipse(-L * 0.05, -L * 0.08, L * 0.3, L * 0.05, 0, 0, TAU); c.fill();
+  c.restore();
+}
+function drawNema(b) {
+  const c = fx, n = 12, L = b.len, a = b.a, ca = Math.cos(a), sa = Math.sin(a);
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1), along = (0.5 - t) * L, amp = L * 0.12 * Math.sin(b.ph - t * 7) * (0.4 + 0.6 * t);
+    pts.push([b.x + ca * along - sa * amp, b.y + sa * along + ca * amp]);
+  }
+  c.strokeStyle = 'rgba(10,6,2,0.25)'; c.lineWidth = 1.1; c.beginPath(); c.moveTo(pts[0][0] + 0.6, pts[0][1] + 0.7); for (const p of pts) c.lineTo(p[0] + 0.6, p[1] + 0.7); c.stroke();
+  c.strokeStyle = 'rgba(238,232,212,0.72)'; c.lineWidth = 0.85; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (const p of pts) c.lineTo(p[0], p[1]); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 0.3; c.beginPath(); c.moveTo(pts[0][0] - 0.2, pts[0][1] - 0.25); for (const p of pts) c.lineTo(p[0] - 0.2, p[1] - 0.25); c.stroke();
+}
+function drawBugs() {
+  fx.setTransform(BD, 0, 0, BD, 0, 0);
+  fx.clearRect(0, 0, W, H);
+  for (const b of bugs) if (b.k === K_EGG) drawEgg(b); else if (b.k === K_PUPA) drawPupa(b);
+  for (const b of bugs) if (b.k === K_NEMA) drawNema(b);
+  for (const b of bugs) if (b.k === K_LARVA) drawLarva(b);
+  for (const b of bugs) if (b.k === K_MITE || b.k === K_VELVET) drawMite(b);
+  for (const b of bugs) if (b.k === K_SPRING) drawSpring(b);
+  for (const b of bugs) if (b.k === K_FLY && b.z < 1) drawFly(b);
+  for (const p of parts) { const f = 1 - p.m / p.l; fx.fillStyle = `rgba(${p.r},${p.g},${p.b},${0.75 * f})`; fx.fillRect(p.x, p.y, p.s, p.s); }
+  for (const b of bugs) if (b.k === K_FLY && b.z >= 1) drawFly(b);
+}
+
+/* =====================================================================
+   Render
+   ===================================================================== */
+const dirty = new Array(5).fill(true);
+let rr = 0;
+function uploadFields(all) {
+  let budget = all ? 5 : (N < 120000 ? 3 : 2);
+  for (let k = 0; k < 5 && budget > 0; k++) {
+    const idx = (rr + k) % 5;
+    if (!dirty[idx]) continue;
+    const f = FIELDS[idx], p = PACKS[idx], len = f.length;
+    for (let i = 0; i < len; i++) p[i] = f[i] * 255;
+    gl.bindTexture(gl.TEXTURE_2D, fieldTex[idx]);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GW, GH, gl.RGBA, gl.UNSIGNED_BYTE, PACK8[idx]);
+    dirty[idx] = false; budget--;
+  }
+  rr = (rr + 1) % 5;
+}
+const progFade = program(VS_TRI, `#version 300 es
+precision mediump float; out vec4 o; void main(){ o=vec4(0.0); }`);
+function fadeHyphae(f) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboHy); gl.viewport(0, 0, PW, PH);
+  gl.enable(gl.BLEND); gl.blendColor(0, 0, 0, f); gl.blendFunc(gl.ZERO, gl.CONSTANT_ALPHA);
+  gl.useProgram(progFade.p); gl.bindVertexArray(vaoEmpty); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.disable(gl.BLEND);
+}
+function flushSegs() {
+  if (nSeg === 0) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboHy); gl.viewport(0, 0, PW, PH);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(progLine.p); gl.uniform2f(progLine.u.uCss, W, H);
+  gl.bindVertexArray(vaoLine); gl.bindBuffer(gl.ARRAY_BUFFER, bufLine);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, segBuf, 0, nSeg * 12);
+  gl.drawArrays(gl.LINES, 0, nSeg * 2);
+  gl.disable(gl.BLEND); gl.bindVertexArray(null); nSeg = 0;
+}
+let lightAz = 2.35, lightEl = 0.68;
+function render(time) {
+  uploadFields(false);
+  flushSegs();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fboG); gl.viewport(0, 0, PW, PH);
+  gl.useProgram(progG.p);
+  const texs = [texBase, ...fieldTex, texHy];
+  const names = ['uBase', 'uEnv', 'uMyc', 'uSpo', 'uMisc', 'uAux', 'uHyph'];
+  for (let i = 0; i < 7; i++) { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, texs[i]); gl.uniform1i(progG.u[names[i]], i); }
+  const u = progG.u;
+  gl.uniform2f(u.uCss, W, H); gl.uniform2f(u.uGrid, GW, GH); gl.uniform1f(u.uTime, time);
+  gl.uniform1f(u.uRelief, SUB.relief); gl.uniform1f(u.uGloss, SUB.gloss); gl.uniform1f(u.uSSS, SUB.sss);
+  gl.uniform3fv(u.uSubA, SUB.A); gl.uniform3fv(u.uSubB, SUB.B); gl.uniform3fv(u.uSubF, SUB.F);
+  gl.uniform3fv(u.uRot1, SUB.r1); gl.uniform3fv(u.uRot2, SUB.r2); gl.uniform3fv(u.uRot3, SUB.r3); gl.uniform3fv(u.uLiq, SUB.liq);
+  gl.bindVertexArray(vaoEmpty); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texGH); gl.generateMipmap(gl.TEXTURE_2D);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, PW, PH);
+  gl.useProgram(progL.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, texGA); gl.uniform1i(progL.u.uA, 0);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, texGH); gl.uniform1i(progL.u.uH, 1);
+  const az = lightAz + (REDUCED ? 0 : 0.16 * Math.sin(time * 0.045)), el = lightEl;
+  gl.uniform3f(progL.u.uL, Math.cos(az) * Math.cos(el), Math.sin(az) * Math.cos(el), Math.sin(el));
+  gl.uniform2f(progL.u.uRes, PW, PH); gl.uniform2f(progL.u.uCss, W, H); gl.uniform1f(progL.u.uRS, RS);
+  gl.uniform1f(progL.u.uTime, time); gl.uniform1f(progL.u.uGrain, REDUCED ? 0.5 : (time * 7.31) % 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* =====================================================================
+   Specimen lifecycle
+   ===================================================================== */
+let speed = LYRIC_MODE ? LYRICS.speed : 1, paused = false;
+function newSpecimen(subId) {
+  SUB = SUBS[subId];
+  specSeed = [R() * 900 + 50, R() * 900 + 50];
+  measure(); gridFor();
+  allocTargets(); allocFields();
+  if (fboHy) { gl.deleteFramebuffer(fboHy); gl.deleteTexture(texHy); fboHy = null; texHy = null; }
+  allocHyphae(false);
+  drawBase(fboBase, PW, PH);
+  initSim();
+  lt = 0; lineNo = -1; curLine = null; doomSp = [-1, -1];
+  uploadFields(true);
+}
+
+let resizeTimer = 0;
+function onResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const oW = W, oH = H;
+    measure();
+    if (W === oW && H === oH && glc.width === PW) return;
+    const aspectChange = Math.abs(Math.log((W / H) / (oW / oH)));
+    if (aspectChange > 0.25 || LYRIC_MODE) { newSpecimen(SUB.id); return; }
+    csx = W / GW; csy = H / GH;
+    for (const b of bugs) { b.x *= W / oW; b.y *= H / oH; if (b.sp) for (let i = 0; i < b.sp.length; i += 2) { b.sp[i] *= W / oW; b.sp[i + 1] *= H / oH; } }
+    allocTargets(); allocHyphae(true); drawBase(fboBase, PW, PH);
+  }, 250);
+}
+addEventListener('resize', onResize);
+
+/* =====================================================================
+   Loop
+   ===================================================================== */
+const TPS = 30;
+let last = performance.now(), ftAvg = 16, ftN = 0, t0 = performance.now();
+function tickWorld(dt) {
+  if (paused) return 0;
+  if (LYRIC_MODE) lyricClock(dt);
+  const dT = Math.min(dt * TPS * speed, speed * 2.5 + 2);
+  if (dT > 0) advance(dT);
+  updateBugs(dt * Math.min(1.6, Math.sqrt(speed)), dT);
+  return dT;
+}
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  tickWorld(dt);
+  if (LYRIC_MODE && !paused) fadeHyphae(Math.pow(0.91, dt));
+  render((now - t0) / 1000);
+  drawBugs();
+  ftAvg = ftAvg * 0.95 + (dt * 1000) * 0.05; ftN++;
+  if (ftN % 150 === 0 && ftAvg > 36 && qualityScale > 0.5 && !document.hidden) { qualityScale *= 0.8; onResizeForce(); }
+  requestAnimationFrame(frame);
+}
+function onResizeForce() { measure(); allocTargets(); allocHyphae(true); drawBase(fboBase, PW, PH); }
+
+// hooks for automated checks: step the world in fixed frames without waiting on real time
+window.ROT = {
+  step(seconds, fps = 30) { const n = Math.round(seconds * fps), was = paused; paused = false; for (let k = 0; k < n; k++) { tickWorld(1 / fps); if (LYRIC_MODE) fadeHyphae(Math.pow(0.91, 1 / fps)); if (nSeg > MAXSEG * 0.7) flushSegs(); } paused = was; flushSegs(); uploadFields(true); },
+  advance(ticks, step = 1.5) { let t = 0; while (t < ticks) { advance(step); updateBugs(0.05, step); if (nSeg > MAXSEG * 0.7) flushSegs(); t += step; } flushSegs(); uploadFields(true); },
+  timing() { const a = performance.now(); tickWorld(1 / 60); const b = performance.now(); uploadFields(false); const c = performance.now(); return { world: b - a, upload: c - b, tips: nTip, N, GW, GH, PW, PH }; },
+  freeze() { paused = true; }, thaw() { paused = false; last = performance.now(); },
+  get T() { return T; }, get lt() { return lt; }, stats, census, bugs, newSpecimen,
+};
+
+const HASH_SUB = { bread: 0, citrus: 1, apple: 2, wood: 3 }[location.hash.slice(1)];
+const fontReady = Promise.race([document.fonts ? document.fonts.load(`100px ${LYRICS.font}`) : Promise.resolve(), new Promise(r => setTimeout(r, 2500))]);
+fontReady.catch(() => {}).then(() => {
+  newSpecimen(HASH_SUB !== undefined ? HASH_SUB : LYRICS.substrate);
+  last = performance.now();
+  requestAnimationFrame(frame);
+});
+})();
+</script>
+</body>
+</html>
