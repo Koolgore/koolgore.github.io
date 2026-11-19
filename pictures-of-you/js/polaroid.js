@@ -124,7 +124,9 @@ ${GLSL_LIGHTING}
 ${GLSL_COVER}
 uniform sampler2D uDetail;     // baked: grain, smudge, mottle, reagent
 uniform sampler2D uTextNoise;  // baked: chem, density, fine
-uniform sampler2D uExpo;       // light-pen exposure: r = exposure, g = exposure * time
+uniform sampler2D uEmul;       // developed emulsion from the photochemical text sim (sRGB)
+uniform float uUseEmul;
+uniform sampler2D uExpo;       // (unused legacy light-pen exposure)
 uniform sampler2D uGlow;       // light scattered inside the emulsion
 uniform sampler2D uHal;        // halation bounced off the film base
 uniform vec4 uPen;             // pen tip: film uv, intensity, spot radius (px @1024)
@@ -183,77 +185,18 @@ void main() {
   float reag = smoothstep(0.16, 0.0, edgeD + (det.a - 0.5) * 0.14);
   emul = mix(emul, vec3(0.035, 0.030, 0.022), reag * 0.6);
 
-  // ------------------------------------------- words exposed by light
-  // Model (all in exposure space until the response curve):
-  //   exposure  = light strokes + scatter inside the emulsion + red-layer halation
-  //   response  = per dye layer S-curve in log exposure (warm light saturates red first)
-  //   chemistry = dye diffusion frays edges (isotropic feathering, thicker reagent bleeds more)
-  //   timing    = each spot develops on its own clock, blotchy with reagent thickness
+  // ------------------------------------------- developed emulsion (text sim)
   vec3 textEmit = vec3(0.0);
   vec3 textAlb = vec3(0.0);
-  if (inImg > 0.5) {
-    vec4 tn = texture(uTextNoise, tuv);
-    float reag = tn.r;                               // local reagent thickness
-    vec2 feather = (tn.ba - 0.5);
-    // when was this spot exposed? cores use their own time; the fringe uses the
-    // smooth, wide halation estimate so there are no seams between the two
-    vec4 ex0 = texture(uExpo, tuv);
-    vec4 hl0 = texture(uHal, tuv);
-    float tauS = hl0.r > 1e-4 ? hl0.g / hl0.r : 1e4;
-    float tauC = ex0.r > 2e-3 ? ex0.g / ex0.r : tauS;
-    float ageC = uTime - (uTauBase + tauC);
-    float age = uTime - (uTauBase + tauS);
-    if (uGhost > 0.0) { age = 12.0; ageC = 12.0; }
-    // development clock: thicker reagent develops later and spreads further
-    float tdev = age / (0.75 + 0.6 * reag);
-    float tdevC = ageC / (0.75 + 0.6 * reag);
-    float d1 = smoothstep(0.00, 0.55, tdevC);        // stroke cores come up first
-    float d2 = smoothstep(0.15, 1.30, tdev);         // scatter fringe blossoms outward
-    float d3 = smoothstep(0.40, 2.40, tdev);         // halation rim last
-    // dye diffusion: read the image through a fraying, isotropic warp that grows
-    // outward from the cores and with reagent thickness
-    float bleed = (0.5 + 0.9 * reag) * (0.35 + 0.65 * d2);
-    vec2 w1 = feather * 0.0040 * bleed;
-    vec2 w2 = feather * 0.0110 * bleed;
-    vec2 w3 = feather * 0.0160 * bleed;
-    float Ed = texture(uExpo, tuv + w1).r;
-    float Eg = texture(uGlow, tuv + w2).r;
-    float Eh = texture(uHal, tuv + w3).r;
-    // fibrous dye migration: ridged, direction-free tendrils thin and thicken the fringe
-    float rid = 1.0 - abs(tn.b * 2.0 - 1.0);
-    float rid2 = 1.0 - abs(tn.a * 2.0 - 1.0);
-    float fib = mix(1.0, 0.35 + 1.1 * rid * rid2 + 0.25 * rid, 0.85 * d2);
-    Eg *= fib; Eh *= mix(1.0, fib, 0.7);
-    // edge fog: stray light along one side, stretched along the edge, slowly warped
-    vec2 ctr = (p - 0.5 * (IMG.xy + IMG.zw)) / (0.5 * (IMG.zw - IMG.xy));
-    float side = smoothstep(-0.2, 1.0, dot(normalize(ctr + 1e-4), uLeak.yz));
-    float leak = uLeak.x * side * exp(-edgeD / (0.20 + 0.25 * reag)) * (0.25 + 0.95 * det.a);
-    // exposure per dye layer. Warm light: red layer receives the most.
-    vec3 spec = vec3(1.0, 0.50, 0.16);
-    vec3 E = (Ed * d1 + 0.45 * Eg * d2) * spec;
-    E.r += (0.75 * Eh + 0.10 * Eg) * d3;             // halation re-exposes the red layer
-    E.g += 0.18 * Eh * d3;
-    E += leak * vec3(1.0, 0.42, 0.10);
-    // per-layer characteristic curve (positive): two sub-layers, sigmoid in log10 E
-    vec3 lE = log2(max(E, 1e-5)) * 0.30103;
-    vec3 fast = 1.0 / (1.0 + exp(-3.6 * (lE + 0.45)));
-    vec3 slow = 1.0 / (1.0 + exp(-3.0 * (lE - 0.18)));
-    vec3 pos = 0.45 * fast + 0.55 * slow;
-    // dye clouds: development isn't perfectly smooth at any scale
-    pos *= 0.93 + 0.14 * tn.g;
-    // overexposed cores clip to the film's faintly lavender cream white
-    pos = mix(pos, vec3(1.0, 0.955, 0.985), smoothstep(0.85, 1.0, min(pos.r, pos.g)));
-    // early in development the image is dim and cool, warm colour arrives last
-    vec3 cool = vec3(dot(pos, vec3(0.3, 0.5, 0.2))) * vec3(0.55, 0.68, 0.85);
-    float tv = max(tdev, tdevC);
-    vec3 print = mix(cool * 0.6, pos, smoothstep(0.25, 1.6, tv)) * smoothstep(0.0, 0.25, tv);
-    print = max(print, vec3(0.0));
-    textAlb = print;
-    // a print doesn't glow; a little lift keeps it legible in the dark room
-    textEmit = print * print * 0.32 * uTextGain;
-    if (uGhost > 0.0) { textAlb *= uGhost; textEmit *= uGhost * 0.5; }
+  if (inImg > 0.5 && uUseEmul > 0.5) {
+    vec3 sc = texture(uEmul, tuv).rgb;
+    vec3 lin = mix(sc / 12.92, pow((sc + 0.055) / 1.055, vec3(2.4)), step(0.04045, sc));
+    textAlb = lin;
+    // the developed print reads luminous in the dark room: brights lift a little
+    textEmit = lin * lin * 0.55 * uTextGain;
+    if (uGhost > 0.0) { textAlb *= mix(1.0, uGhost, 0.5); textEmit *= uGhost * 0.5; }
   }
-  vec3 imgAlb = max(emul, textAlb);
+  vec3 imgAlb = uUseEmul > 0.5 ? textAlb : emul;
 
   s.albedo = mix(frameCol, imgAlb, img);
   s.rough = mix(0.62, 0.11 + 0.05 * mott, img);
@@ -360,9 +303,8 @@ void main() {
 `;
 
 export class Polaroid {
-  constructor({ seg = [88, 107], seed = 1, light = null, shared }) {
+  constructor({ seg = [88, 107], seed = 1, shared }) {
     this.seed = seed;
-    this.light = light;
     this.geometry = new THREE.PlaneGeometry(CARD_W, CARD_H, seg[0], seg[1]);
     this.uniforms = {
       uTime: shared.uTime,
@@ -376,13 +318,15 @@ export class Polaroid {
       uBurnTex: { value: null },
       uBurnBase: { value: 0 },
       uTextNoise: { value: null },
-      uExpo: { value: light ? light.textures.expo : null },
-      uGlow: { value: light ? light.textures.glow : null },
-      uHal: { value: light ? light.textures.hal : null },
+      uEmul: { value: null },
+      uUseEmul: { value: 0 },
+      uExpo: { value: null },
+      uGlow: { value: null },
+      uHal: { value: null },
       uPen: { value: new THREE.Vector4(0, 0, 0, 3) },
       uPenPrev: { value: new THREE.Vector2(0, 0) },
       uLeak: { value: new THREE.Vector4(0, -1, 0.3, 0) },
-      uTauBase: { value: light ? light.base : 0 },
+      uTauBase: { value: 0 },
       uTextGain: { value: 1 },
       uGhost: { value: 0 },
       uDepthScale: { value: 1 },

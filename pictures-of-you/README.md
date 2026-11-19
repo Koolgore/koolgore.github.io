@@ -87,6 +87,7 @@ ffmpeg -i out/pictures.mp4 -ss 111.2 -i "Pictures of You.m4a" \
 | file | what |
 | --- | --- |
 | `js/timing.js` | song timeline: lines, word syllables, burn ignitions, flourish |
+| `js/emulsion.js` | one developing emulsion per print, driven by the vendored PolaroidTextSim (`vendor/polaroid-text-sim/`) |
 | `js/lightGlyphs.js` | the stroke alphabet (lines and arcs), word layout, and the light pen's path, speed and timing |
 | `js/lightText.js` | accumulates the pen's exposure on the film on the GPU, plus emulsion scatter and halation |
 | `js/polaroid.js` | print geometry and deformation, plus the develop, burn, char and ember shading; bakes static noise and the burn field |

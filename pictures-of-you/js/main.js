@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Polaroid, CARD_W, CARD_H, IMG } from './polaroid.js';
 const IMG_X0 = IMG.x0, IMG_Y0 = IMG.y0, IMG_W = IMG.x1 - IMG.x0;
-import { LightText } from './lightText.js';
+import { PrintEmulsion, loadEmulsionFont } from './emulsion.js';
 import { lightingUniforms, MAX_FIRE_LIGHTS } from './lighting.js';
 import { makeTable } from './table.js';
 import { FireFluid } from './fluid.js';
@@ -47,12 +47,15 @@ export class LyricVideo {
 
     // the four prints
     const defs = await TL.loadPolaroids();
+    await loadEmulsionFont();
     this.prints = defs.map((def, i) => {
       const words = TL.wordsFor(def);
-      const light = new LightText(renderer, words, 3.1 + i * 1.7);
-      const p = new Polaroid({ seed: 1.37 + i * 2.91, light, shared: this.shared });
-      const la = [-2.6, 2.2, -0.4, 3.6][i];
-      p.uniforms.uLeak.value.set(0, Math.cos(la), Math.sin(la), 0);
+      // each print develops its own emulsion (photochemical text sim)
+      const emulsion = new PrintEmulsion(words, { seed: 4.2 + i * 3.7 });
+      const p = new Polaroid({ seed: 1.37 + i * 2.91, shared: this.shared });
+      p.emulsion = emulsion;
+      p.uniforms.uEmul.value = emulsion.texture;
+      p.uniforms.uUseEmul.value = 1;
       const [x, y, z, yaw] = STACK[i];
       p.home = { x, y, z, yaw: THREE.MathUtils.degToRad(yaw) };
       p.mesh.position.set(x, y, z);
@@ -72,7 +75,8 @@ export class LyricVideo {
     for (let i = 0; i < 13; i++) {
       const src = this.prints[i % 4];
       const ghost = fr() < 0.5;
-      const p = new Polaroid({ seg: [26, 32], seed: 11.3 + i * 1.77, light: ghost ? src.light : this.noLight(), shared: this.shared });
+      const p = new Polaroid({ seg: [26, 32], seed: 11.3 + i * 1.77, shared: this.shared });
+      if (ghost) { p.uniforms.uEmul.value = src.emulsion.texture; p.uniforms.uUseEmul.value = 1; }
       p.uniforms.uGhost.value = ghost ? 0.35 + fr() * 0.3 : 0;
       const t0 = TL.FLOURISH + 0.9 + i * 0.52 + fr() * 0.4;
       // depth along the view: mostly mid-air beyond the hero print, a couple whip past the lens
@@ -214,26 +218,8 @@ export class LyricVideo {
 
     for (const p of all) p.mesh.updateMatrixWorld();
 
-    // light pens: expose the film up to now, place the glowing tip
-    const penLight = this.lighting.uPenLight.value;
-    penLight.w = 0;
-    for (const p of this.prints) {
-      p.light.update(t);
-      const pen = p.light.pen(t);
-      const prev = p.light.pen(t - 1 / 60);     // half a frame earlier: 180° shutter
-      const u = p.uniforms.uPen.value;
-      // stray light fogs the edges as the line is exposed
-      const prog = smooth(p.light.tStart, p.light.tEnd, t);
-      p.uniforms.uLeak.value.x = 0.35 * prog;
-      if (pen) {
-        u.set(pen.x, pen.y, pen.I * (0.92 + 0.08 * noise1(t * 30, 41)), p.light.sigma);
-        p.uniforms.uPenPrev.value.set(prev ? prev.x : pen.x, prev ? prev.y : pen.y);
-        // world position of the tip, a few mm above the film
-        const lx = IMG_X0 + pen.x * IMG_W, ly = IMG_Y0 + pen.y * IMG_W;
-        const wpos = new THREE.Vector3(lx, ly, 0.35).applyMatrix4(p.mesh.matrixWorld);
-        // (no visible pen: the light only shows up in the developed film)
-      } else u.z = 0;
-    }
+    // develop each print's emulsion up to now (fixed steps; frozen once finished)
+    for (const p of this.prints) p.emulsion.update(t);
 
     // spawn sparks / ash from burn fronts, gather fire lights
     for (const p of all) {

@@ -2,7 +2,16 @@
 
 This file is self-contained so a fresh session can pick the work up.
 
-## Where things stand
+## Update: text now uses the user's PolaroidTextSim package
+
+The user supplied a ready-made photochemical text engine, vendored in `vendor/polaroid-text-sim/` (engine, shaders and the OFL Caveat font, without the sample photos). `js/emulsion.js` runs one sim per print, stepped in fixed 1/30 s steps from its own start for deterministic renders, and feeds it to the print shader as the image texture. The plan below remains the route to a calibrated, physically derived version if the user wants to go further. Open items:
+
+* the sim draws words with a handwritten font; the user earlier preferred math-built letter strokes, and those could feed the sim's exposure mask instead
+* the sim's vertical "roller shaft" streaks could read as flame, so consider lowering `streakStrength`
+* a per-frame render cost check
+* review of the burn and finale in 9:16
+
+## Where things stood before that
 
 * The scene works end to end and defaults to 9:16 at 1080×1920:
   * stack of prints, light-written words, burn, fire fluid, sparks and ash
