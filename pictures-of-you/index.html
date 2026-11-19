@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pictures, Burning</title>
+<style>
+  :root { color-scheme: dark; --fg: #d9d4ca; --dim: #8a857c; --line: #2a2826; --bg: #050505; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #stage { flex: 1; display: grid; place-items: center; min-height: 0; padding: 12px 16px 0; }
+  canvas { height: calc(100vh - 110px); max-width: 100%; aspect-ratio: var(--ar, 9 / 16); background: #000; display: block; }
+  #bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+  button, input[type=number] { background: #151413; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; font: inherit; }
+  button:hover { border-color: #4a4640; }
+  label { color: var(--dim); display: inline-flex; gap: 8px; align-items: center; }
+  input[type=number] { width: 72px; padding: 6px 8px; }
+  #status { color: var(--dim); margin-left: auto; font-variant-numeric: tabular-nums; }
+  body.capture #bar { display: none; }
+  body.capture #stage { padding: 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js" } }
+</script>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="bar">
+  <button id="play">Play</button>
+  <label>Song file <input id="audio" type="file" accept="audio/*" /></label>
+  <label>Sync offset (s) <input id="offset" type="number" step="0.05" value="0" /></label>
+  <span id="status">loading…</span>
+</div>
+<script type="module">
+import { LyricVideo } from './js/main.js';
+import * as TL from './js/timing.js';
+
+const qs = new URLSearchParams(location.search);
+const capture = qs.has('capture');
+if (capture) document.body.classList.add('capture');
+const W = +(qs.get('w') || 1080), H = +(qs.get('h') || 1920);
+document.documentElement.style.setProperty('--ar', `${W} / ${H}`);
+const canvas = document.getElementById('c');
+const app = new LyricVideo(canvas, { width: W, height: H, capture, emulsionRes: +(qs.get('emures') || 1024) });
+if (qs.has('msaa')) app.msaa = +qs.get('msaa');
+window.lyric = app;
+const status = document.getElementById('status');
+
+app.init().then(() => {
+  window.lyricReady = true;
+  if (capture) return;
+  status.textContent = 'ready – add your copy of the album version (7:28) for sound';
+  let audio = null, playing = false, last = 0, t = TL.VIDEO_START;
+  const offsetEl = document.getElementById('offset');
+  document.getElementById('audio').addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    audio = new Audio(URL.createObjectURL(f));
+    status.textContent = `loaded ${f.name}`;
+  });
+  const start = () => {
+    app.reset(TL.VIDEO_START);
+    t = TL.VIDEO_START;
+    if (audio) { audio.currentTime = TL.VIDEO_START - (+offsetEl.value || 0); audio.play(); }
+    playing = true; last = performance.now();
+    document.getElementById('play').textContent = 'Restart';
+  };
+  document.getElementById('play').addEventListener('click', start);
+  // still frame until played
+  app.update(t, 1 / 30); app.render(1 / 30);
+  const loop = (now) => {
+    requestAnimationFrame(loop);
+    if (!playing) return;
+    let dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (audio && !audio.paused) { const at = audio.currentTime + (+offsetEl.value || 0); dt = Math.min(0.05, Math.max(0.001, at - t)); t = at; }
+    else t += dt;
+    if (t > TL.VIDEO_END) { playing = false; audio?.pause(); return; }
+    app.step(t, dt);
+    status.textContent = `song ${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
+  };
+  requestAnimationFrame(loop);
+}).catch((e) => { status.textContent = 'error: ' + e.message; console.error(e); window.lyricError = String(e.stack || e); });
+</script>
+</body>
+</html>

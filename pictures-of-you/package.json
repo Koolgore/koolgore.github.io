@@ -1,0 +1,14 @@
+{
+  "name": "pictures-of-you-lyric-video",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Real-time WebGL lyric video (burning Polaroids) with a headless frame renderer.",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@fontsource/cormorant-garamond": "5.1.0",
+    "three": "0.170.0"
+  }
+}
