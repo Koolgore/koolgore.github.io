@@ -15,8 +15,16 @@ const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t
 const lerp = (a, b, t) => a + (b - a) * t;
 
 // photographs under each print's words, in print order
-const PHOTOS = ['kari_01', 'kari_02', 'kari_03', 'kari_04'];
+export const PHOTOS = ['kari_01', 'kari_02', 'kari_03', 'kari_04'];
 const PHOTO_SET = 'scribbled';   // or 'sq' for the unscribbled originals
+
+// a different light-leak layout on each print (which edges and corners leak, and how hard)
+export const LEAKS = [
+  { leakFlip: [1, 1], leakSwap: 0, leakShift: 0.0, leakGain: [1.0, 0.45, 0.9, 0.5] },     // left edge, top-left flare
+  { leakFlip: [-1, 1], leakSwap: 0, leakShift: -0.22, leakGain: [0.3, 1.2, 0.35, 0.9] },  // right edge, low corner burn
+  { leakFlip: [-1, 1], leakSwap: 1, leakShift: 0.12, leakGain: [1.35, 1.0, 1.0, 0.35] },  // top edge, both top corners
+  { leakFlip: [1, 1], leakSwap: 1, leakShift: -0.08, leakGain: [1.15, 0.6, 0.75, 1.0] },  // bottom edge, bottom-right flare
+]
 
 // loose stack, top first: [x, y, z, yaw(deg)]
 const STACK = [
@@ -61,7 +69,7 @@ export class LyricVideo {
       const emulsion = new PrintEmulsion(words, {
         seed: 4.2 + i * 3.7,
         photo: photos[i],
-        params: { fontSize: 118, textYOffset: -0.02, bgIntensity: 0.55 },   // the sim centres at 0.52; -0.02 = true centre
+        params: { fontSize: 118, textYOffset: -0.02, bgIntensity: 0.55, ...LEAKS[i] },   // the sim centres at 0.52; -0.02 = true centre
       });
       const p = new Polaroid({ seed: 1.37 + i * 2.91, shared: this.shared });
       p.emulsion = emulsion;

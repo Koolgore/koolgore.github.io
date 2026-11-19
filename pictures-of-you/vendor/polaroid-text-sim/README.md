@@ -135,3 +135,8 @@ Set `showFrame: false` and size the offscreen canvas to `768×768` (or `1024×10
 | `exposure` | `1.12` | Overall HDR exposure into the AgX tone mapper |
 | `developSpeed` | `1.0` | Speed multiplier for chemical accumulation |
 | `seed` | `4.2` | Deterministic seed for grain, light-leaks, and handwriting variation |
+
+## Local changes in this copy
+
+* Added per-print light-leak layout parameters: `leakGain`, `leakFlip`, `leakSwap` and `leakShift`. The defaults reproduce the original layout. The reagent-pod marks stay on the bottom edge.
+

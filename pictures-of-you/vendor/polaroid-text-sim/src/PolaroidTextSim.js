@@ -29,6 +29,11 @@ const DEFAULT_PARAMS = {
   bgIntensity: 0.45,
   bgDevelop: 1.0,
   textYOffset: 0.0,      // Vertical offset in normalized emulsion coords (-0.5..0.5, + = lower)
+  // per-print light-leak layout (added; defaults reproduce the original layout)
+  leakGain: [1, 1, 1, 1],   // corner leak, pod-corner leak, edge burn line, minor hints
+  leakFlip: [1, 1],         // mirror the layout in x / y
+  leakSwap: 0,              // 1 = rotate the layout onto the other pair of edges
+  leakShift: 0,             // slide leaks along their edge
   seed: 4.2,
 };
 
@@ -344,6 +349,10 @@ export class PolaroidTextSim {
     gl.uniform1f(this.progComposite.uniforms.uGrainAmount, this.params.grainAmount);
     gl.uniform1f(this.progComposite.uniforms.uWarmth, this.params.warmth);
     gl.uniform1f(this.progComposite.uniforms.uExposure, this.params.exposure);
+    const lg = this.params.leakGain, lf = this.params.leakFlip;
+    gl.uniform4f(this.progComposite.uniforms.uLeakGain, lg[0], lg[1], lg[2], lg[3]);
+    gl.uniform3f(this.progComposite.uniforms.uLeakXf, lf[0], lf[1], this.params.leakSwap);
+    gl.uniform1f(this.progComposite.uniforms.uLeakShift, this.params.leakShift);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);

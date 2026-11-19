@@ -321,6 +321,10 @@ uniform float uEdgeBurn;
 uniform float uGrainAmount;
 uniform float uWarmth;
 uniform float uExposure;
+// per-print light-leak layout (added): gains = corner leak, pod-corner leak, edge burn line, minor hints
+uniform vec4 uLeakGain;
+uniform vec3 uLeakXf;      // mirror x (+/-1), mirror y (+/-1), swap axes (0/1)
+uniform float uLeakShift;  // slide the leaks along their edge
 
 ${NOISE_GLSL}
 
@@ -379,29 +383,36 @@ vec3 filmSpectrum(float density, float warmth) {
 vec3 computeEdgeBurns(vec2 euv, float strength, float seed) {
   if (strength <= 0.001) return vec3(0.0);
 
+  // leak layout differs per print: mirror / rotate the frame they're placed in and slide them along
+  // the edge. The reagent-pod marks below stay on the real bottom edge (euv).
+  vec2 luv = uLeakXf.z > 0.5 ? euv.yx : euv;
+  if (uLeakXf.x < 0.0) luv.x = 1.0 - luv.x;
+  if (uLeakXf.y < 0.0) luv.y = 1.0 - luv.y;
+  luv.y += uLeakShift;
+
   float nBig  = fbm(euv * 3.8 + vec2(seed * 3.1, seed * 7.7));
   float nMed  = fbm(euv * 11.5 + vec2(seed * 9.4, 2.3));
   float nRdg  = ridgedFbm(euv * 18.0 + vec2(seed * 2.1, 6.4));
 
-  float dLeft   = euv.x;
+  float dLeft   = luv.x;
   float dBottom = euv.y;
 
   // Subtle warm-mahogany chemical fog in upper-left quadrant
-  float fogTL = smoothstep(0.66 + nBig * 0.24, 0.0, length((euv - vec2(0.05, 0.95)) * vec2(1.1, 1.0)));
+  float fogTL = smoothstep(0.66 + nBig * 0.24, 0.0, length((luv - vec2(0.05, 0.95)) * vec2(1.1, 1.0)));
 
   // Sharp bright top-left border light-leak
-  float tlHot = smoothstep(0.14 + nMed * 0.07, 0.0, length((euv - vec2(-0.01, 0.96)) * vec2(2.7, 0.95))) * (0.55 + 0.65 * nRdg);
+  float tlHot = smoothstep(0.14 + nMed * 0.07, 0.0, length((luv - vec2(-0.01, 0.96)) * vec2(2.7, 0.95))) * (0.55 + 0.65 * nRdg);
 
   // Bright bottom-left pod-corner chemical leak hugging bottom edge
-  float blHot = smoothstep(0.21 + nMed * 0.08, 0.0, length((euv - vec2(0.02, -0.01)) * vec2(1.2, 2.9))) * (0.65 + 0.55 * nRdg);
-  float blLeft = smoothstep(0.12 + nMed * 0.05, 0.0, length((euv - vec2(-0.01, 0.04)) * vec2(2.9, 1.3)));
+  float blHot = smoothstep(0.21 + nMed * 0.08, 0.0, length((luv - vec2(0.02, -0.01)) * vec2(1.2, 2.9))) * (0.65 + 0.55 * nRdg);
+  float blLeft = smoothstep(0.12 + nMed * 0.05, 0.0, length((luv - vec2(-0.01, 0.04)) * vec2(2.9, 1.3)));
 
   // Delicate irregular left-edge chemical burn line
   float leftLine = smoothstep(0.028 + nRdg * 0.022, 0.0, dLeft) * (0.35 + 0.82 * nMed);
 
   // Subtle right & top-right edge artifacts
-  float brHint = smoothstep(0.13 + nMed * 0.05, 0.0, length((euv - vec2(1.01, 0.01)) * vec2(2.7, 1.9))) * 0.45;
-  float trSpot = smoothstep(0.08 + nMed * 0.04, 0.0, length((euv - vec2(0.84, 1.01)) * vec2(1.4, 3.2))) * 0.36;
+  float brHint = smoothstep(0.13 + nMed * 0.05, 0.0, length((luv - vec2(1.01, 0.01)) * vec2(2.7, 1.9))) * 0.45;
+  float trSpot = smoothstep(0.08 + nMed * 0.04, 0.0, length((luv - vec2(0.84, 1.01)) * vec2(1.4, 3.2))) * 0.36;
 
   // Authentic Polaroid 3-pod bottom-edge reagent crystallization "flames" (tiny milky-blue/cream wisps at y~0)
   float podX1 = exp(-pow((euv.x - 0.18) * 14.0, 2.0));
@@ -413,7 +424,9 @@ vec3 computeEdgeBurns(vec2 euv, float strength, float seed) {
 
   float leftPin = smoothstep(0.015, 0.0, dLeft) * smoothstep(0.75, 0.95, nRdg) * 0.95;
 
-  float hotEnergy = (tlHot * 1.30 + blHot * 1.48 + blLeft * 0.90 + leftLine * 0.42 + brHint + trSpot + leftPin) * strength;
+  fogTL *= uLeakGain.x;
+  float hotEnergy = ((tlHot * 1.30) * uLeakGain.x + (blHot * 1.48 + blLeft * 0.90) * uLeakGain.y
+                   + (leftLine * 0.42 + leftPin) * uLeakGain.z + (brHint + trSpot) * uLeakGain.w) * strength;
 
   vec3 c = vec3(0.0);
   c += vec3(0.062, 0.020, 0.005) * fogTL * (0.4 + 0.8 * nMed) * strength;
