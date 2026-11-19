@@ -5,6 +5,7 @@
 //   node render.mjs --stills 114,118.6      PNG stills (simulation warms up 2.5 s before each)
 //   node render.mjs --from 116 --to 121     render a time range (song seconds)
 //   node render.mjs --audio song.m4a        mux YOUR copy of the album track into the mp4
+//   node render.mjs --gpu                   use this machine's GPU (much faster; opens a browser window)
 //
 // Needs Playwright (with Chromium) and ffmpeg on PATH.
 import http from 'node:http';
@@ -36,7 +37,11 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 
-const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+// --gpu: use the machine's graphics card (opens a visible browser window while rendering).
+// Without it, WebGL runs in software (SwiftShader), which works anywhere but is slow.
+const browser = args.gpu
+  ? await chromium.launch({ headless: false, args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] })
+  : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: Math.min(W, 1920), height: Math.min(H, 1920) } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[page]', m.type(), m.text().slice(0, 400)); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
@@ -47,6 +52,11 @@ await page.goto(`http://127.0.0.1:${port}/index.html?capture&w=${W}&h=${H}${args
 await page.waitForFunction(() => window.lyricReady || window.lyricError, null, { timeout: 180000 });
 const err = await page.evaluate(() => window.lyricError);
 if (err) { console.error(err); process.exit(1); }
+console.log('WebGL renderer:', await page.evaluate(() => {
+  const gl = window.lyric.renderer.getContext();
+  const d = gl.getExtension('WEBGL_debug_renderer_info');
+  return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+}));
 
 if (args.nofire) await page.evaluate(() => { window.lyric.debugNoFire = true; });
 const T = await page.evaluate(async () => {
