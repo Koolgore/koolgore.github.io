@@ -3,7 +3,6 @@
 import * as THREE from 'three';
 import { GLSL_NOISE, fbm2, gnoise } from './noise.js';
 import { GLSL_LIGHTING, GLSL_COVER, coverUniforms } from './lighting.js';
-import { blankField, FIELD } from './textField.js';
 import { FRAG_OUT, Pass } from './gpu.js';
 
 export const CARD_W = 8.8, CARD_H = 10.7;
@@ -123,12 +122,16 @@ const FRAG_MAIN = /* glsl */ `
 ${FRAG_HEAD}
 ${GLSL_LIGHTING}
 ${GLSL_COVER}
-uniform sampler2D uText;
 uniform sampler2D uDetail;     // baked: grain, smudge, mottle, reagent
 uniform sampler2D uTextNoise;  // baked: chem, density, fine
-uniform float uOnsets[${MAX_WORDS}];
+uniform sampler2D uExpo;       // light-pen exposure: r = exposure, g = exposure * time
+uniform sampler2D uGlow;       // light scattered inside the emulsion
+uniform sampler2D uHal;        // halation bounced off the film base
+uniform vec4 uPen;             // pen tip: film uv, intensity, spot radius (px @1024)
+uniform vec2 uPenPrev;         // tip position half a frame earlier (motion blur)
+uniform float uTauBase;
 uniform float uTextGain;
-uniform float uGhost;       // >0 for flying prints: pre-developed faint words
+uniform float uGhost;          // >0 for flying prints: long-developed, faint
 uniform float uDepthScale;
 
 void main() {
@@ -178,45 +181,54 @@ void main() {
   float reag = smoothstep(0.16, 0.0, edgeD + (det.a - 0.5) * 0.14);
   emul = mix(emul, vec3(0.035, 0.030, 0.022), reag * 0.6);
 
-  // ------------------------------------------------------- developing words
+  // ------------------------------------------- words painted with light
   vec3 textEmit = vec3(0.0);
   vec3 textAlb = vec3(0.0);
   if (inImg > 0.5) {
-    vec4 tf = texture(uText, tuv);
-    vec4 wf = texelFetch(uText, ivec2(clamp(tuv, 0.0, 0.999) * float(textureSize(uText, 0).x)), 0);
-    int wi = int(wf.g + 0.5), wj = int(wf.b + 0.5);
-    float sd = tf.r;                 // + inside stroke, px @1024
-    float age = uTime - uOnsets[min(wi, ${MAX_WORDS - 1})];
-    float age2 = uTime - uOnsets[min(wj, ${MAX_WORDS - 1})];
-    if (uGhost > 0.0) { age = 6.0; age2 = 6.0; }
-    float g = clamp((age + 0.12) / 0.95, 0.0, 1.0);
-    g = 1.0 - pow(1.0 - g, 2.4);
-    float dev = mix(smoothstep(-0.1, 2.8, age), smoothstep(-0.1, 2.8, age2), wf.a);
-    float pulse1 = smoothstep(-0.12, 0.30, age) * (0.30 + 0.70 * exp(-max(age - 0.30, 0.0) / 0.85));
-    float pulse2 = smoothstep(-0.12, 0.30, age2) * (0.30 + 0.70 * exp(-max(age2 - 0.30, 0.0) / 0.85));
-    float pulse = mix(pulse1, pulse2, wf.a);
-    float seen = mix(smoothstep(-0.15, 0.25, age), smoothstep(-0.15, 0.25, age2), wf.a);
-    // organic, chemical irregularity of the development front
+    vec4 ex = texture(uExpo, tuv);
+    vec4 gw = texture(uGlow, tuv);
+    vec4 hl = texture(uHal, tuv);
+    float Ed = ex.r, Eg = gw.r, Eh = hl.r;
+    // when was this bit of film exposed? (exposure-weighted pen time)
+    float tau = Ed > 2e-3 ? ex.g / Ed : (Eg > 2e-4 ? gw.g / Eg : (Eh > 1e-5 ? hl.g / Eh : 0.0));
+    float age = uTime - (uTauBase + tau);
+    if (uGhost > 0.0) age = 9.0;
     vec4 tn = texture(uTextNoise, tuv);
-    float chem = tn.r - 0.5;
-    float sdn = sd + chem * 7.0 * (1.0 - g) + (tn.b - 0.5) * 1.1;
-    float thr = mix(11.0, -0.4, g);
-    float soft = mix(5.0, 0.85, g);
-    float core = smoothstep(thr - soft, thr + soft, sdn);
-    float outside = max(-sd, 0.0);
-    // glows fall to exactly zero well inside the SDF range (no clamped plateaus)
-    float halo = max(exp(-outside / mix(8.0, 5.5, dev)) - exp(-60.0 / 8.0), 0.0) * seen;
-    float halo2 = max(exp(-outside / 15.0) - exp(-60.0 / 15.0), 0.0) * smoothstep(60.0, 30.0, outside) * pulse;
-    // colour: cold cyan latent image warming to cream as it develops
-    vec3 cEarly = vec3(0.48, 0.74, 0.98);
-    vec3 cLate = vec3(1.00, 0.90, 0.74);
-    vec3 cCore = mix(cEarly, cLate, dev);
-    float density = 0.88 + 0.22 * (tn.g - 0.5);
-    vec3 halCol = mix(vec3(0.25, 0.55, 1.0), vec3(1.0, 0.42, 0.22), dev);
-    textAlb = cCore * core * density * 0.9 + halCol * halo * 0.10 * dev;
-    textEmit = (cCore * core * density * (0.28 + 2.6 * pulse)
-              + halCol * (halo * 0.20 + halo2 * 0.30) * (0.35 + pulse)) * uTextGain;
-    if (uGhost > 0.0) { textAlb *= uGhost; textEmit *= uGhost * 0.4; }
+    // total exposure reaching the dye layers: direct + scattered
+    float X = Ed + 0.18 * Eg + 0.06 * Eh;
+    X *= 0.88 + 0.24 * tn.r;                       // uneven reagent spread
+    // developed positive: warm light vs. the three dye layers' sensitivities,
+    // shoulder rolls overexposed cores to the film's creamy white
+    vec3 Sens = vec3(1.45, 1.05, 0.66);
+    float Xt = max(X - 0.07, 0.0);                 // film toe: faint scatter doesn't register
+    vec3 pos = 1.0 - exp(-Xt * Sens * 1.5);
+    pos = mix(pos, vec3(1.0, 0.96, 0.88), smoothstep(1.2, 4.0, X) * 0.75);
+    vec3 halation = vec3(1.0, 0.30, 0.10) * max(Eh * 0.6 + Eg * 0.06 - 0.01, 0.0);
+    // chemistry: latent, cold and murky first, colours arrive as it develops
+    float seen = smoothstep(-0.01, 0.05, age);
+    float dev = smoothstep(0.10, 2.8, age);
+    vec3 latentCol = vec3(0.32, 0.55, 0.80) * (1.0 - exp(-Xt * 1.1)) * 0.45;
+    vec3 print = mix(latentCol, pos + halation * 0.35, dev) * seen;
+    print *= 0.94 + 0.12 * (tn.g - 0.5);
+    textAlb = print * 0.9;
+    // the light itself: blazing as it's laid down, then a faint afterglow
+    float live = (0.65 * exp(-max(age, 0.0) / 0.10) + 0.35 * exp(-max(age, 0.0) / 0.45)) * seen;
+    float after = (0.16 + 0.40 * exp(-max(age, 0.0) / 1.3)) * seen;
+    vec3 lightCol = vec3(1.0, 0.93, 0.82);
+    textEmit = lightCol * (Ed * 2.2 + Eg * 0.45 + Eh * 0.12) * live
+             + (pos * smoothstep(0.05, 0.6, Ed + 0.1 * Eg) + halation * 0.5) * after * 0.55;
+    // the pen tip: a hot point with a soft corona
+    // distance to the tip's path during the shutter (motion-blurred streak)
+    vec2 pa = uPenPrev * 1024.0, pb = uPen.xy * 1024.0, pp = tuv * 1024.0;
+    vec2 ab = pb - pa;
+    float hseg = clamp(dot(pp - pa, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
+    vec2 dp = pp - (pa + ab * hseg);
+    float d2 = dot(dp, dp);
+    float streak = 1.0 / (1.0 + length(ab) / (uPen.w * 3.0));   // energy spreads along the streak
+    float rr = uPen.w;
+    textEmit += vec3(1.0, 0.97, 0.92) * uPen.z * (9.0 * streak * exp(-d2 / (2.0 * rr * rr * 1.7)) + 0.9 * exp(-sqrt(d2) / (rr * 5.0)));
+    textEmit *= uTextGain;
+    if (uGhost > 0.0) { textAlb *= uGhost; textEmit *= uGhost * 0.5; }
   }
   vec3 imgAlb = emul + textAlb;
 
@@ -325,12 +337,10 @@ void main() {
 `;
 
 export class Polaroid {
-  constructor({ seg = [88, 107], seed = 1, field = null, words = [], shared }) {
+  constructor({ seg = [88, 107], seed = 1, light = null, shared }) {
     this.seed = seed;
-    this.words = words;
+    this.light = light;
     this.geometry = new THREE.PlaneGeometry(CARD_W, CARD_H, seg[0], seg[1]);
-    const onsets = new Array(MAX_WORDS).fill(1e6);
-    words.forEach((w, i) => { if (i < MAX_WORDS) onsets[i] = w.onset; });
     this.uniforms = {
       uTime: shared.uTime,
       uIgn: { value: Array.from({ length: MAX_IGN }, () => new THREE.Vector4(0, 0, 1e5, 1)) },
@@ -339,12 +349,16 @@ export class Polaroid {
       uBow: { value: 0.05 + 0.04 * ((seed * 7) % 3) },
       uBend: { value: new THREE.Vector4(0, 0, 0, 0) },
       uCurl: { value: new THREE.Vector2(0, 0) },
-      uText: { value: field ? field.texture : blankField() },
       uDetail: { value: null },
       uBurnTex: { value: null },
       uBurnBase: { value: 0 },
       uTextNoise: { value: null },
-      uOnsets: { value: onsets },
+      uExpo: { value: light ? light.textures.expo : null },
+      uGlow: { value: light ? light.textures.glow : null },
+      uHal: { value: light ? light.textures.hal : null },
+      uPen: { value: new THREE.Vector4(0, 0, 0, 3) },
+      uPenPrev: { value: new THREE.Vector2(0, 0) },
+      uTauBase: { value: light ? light.base : 0 },
       uTextGain: { value: 1 },
       uGhost: { value: 0 },
       uDepthScale: { value: 1 },
@@ -459,4 +473,3 @@ export class Polaroid {
   }
 }
 
-export { FIELD };

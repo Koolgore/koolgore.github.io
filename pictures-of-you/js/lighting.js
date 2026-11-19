@@ -13,6 +13,7 @@ export function lightingUniforms() {
     uAmbBot: { value: new THREE.Vector3(0.004, 0.004, 0.005) },
     uFireL: { value: Array.from({ length: MAX_FIRE_LIGHTS }, () => new THREE.Vector4(0, 0, 0, 0)) },
     uFireCol: { value: new THREE.Vector3(1.0, 0.50, 0.17) },
+    uPenLight: { value: new THREE.Vector4(0, 0, 0, 0) },
     uShadow: { value: null },
     uShadowMat: { value: new THREE.Matrix4() },
     uShadowTexel: { value: 1 / 2048 },
@@ -44,6 +45,7 @@ uniform vec3 uKeyDir; uniform vec3 uKeyCol;
 uniform vec3 uAmbTop; uniform vec3 uAmbBot;
 uniform vec4 uFireL[${MAX_FIRE_LIGHTS}];
 uniform vec3 uFireCol;
+uniform vec4 uPenLight;      // the light pen as a small point source (world pos, intensity)
 uniform sampler2D uShadow; uniform mat4 uShadowMat; uniform float uShadowTexel;
 uniform float uEnvGain;
 
@@ -140,6 +142,15 @@ vec3 shade(Surf s, vec3 P, vec3 N, vec3 V, float shadow) {
     vec3 h = normalize(l + V);
     float spec = D_GGX(max(dot(N, h), 0.0), max(a, 0.02)) * V_Smith(NdV, max(dot(N, l), 0.0), a) * (s.f0 + (1.0 - s.f0) * pow(1.0 - max(dot(h, V), 0.0), 5.0));
     col += (s.albedo * nl + spec * max(dot(N, l), 0.0)) * uFireCol * att;
+  }
+  // light pen spill
+  if (uPenLight.w > 0.0) {
+    vec3 Lv = uPenLight.xyz - P; float d2 = dot(Lv, Lv);
+    vec3 l = Lv * inversesqrt(d2);
+    vec3 h = normalize(l + V);
+    float nl = max(dot(N, l), 0.0);
+    float spec = D_GGX(max(dot(N, h), 0.0), max(a, 0.03)) * V_Smith(NdV, nl, a) * (s.f0 + (1.0 - s.f0) * pow(1.0 - max(dot(h, V), 0.0), 5.0));
+    col += (s.albedo * nl + spec * nl) * vec3(1.0, 0.93, 0.82) * uPenLight.w / (d2 + 0.6);
   }
   // environment reflection
   vec3 R = reflect(-V, N);

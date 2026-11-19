@@ -1,7 +1,7 @@
 // Headless, deterministic renderer.
 //
-//   node render.mjs                         full video -> out/pictures.mp4
-//   node render.mjs --w 960 --h 540         quick low-res pass
+//   node render.mjs                         full video (1080x1920) -> out/pictures.mp4
+//   node render.mjs --w 540 --h 960         quick low-res pass
 //   node render.mjs --stills 114,118.6      PNG stills (simulation warms up 2.5 s before each)
 //   node render.mjs --from 116 --to 121     render a time range (song seconds)
 //   node render.mjs --audio song.m4a        mux YOUR copy of the album track into the mp4
@@ -22,11 +22,11 @@ const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) =>
   if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]);
   return acc;
 }, []));
-const W = +(args.w || 1920), H = +(args.h || 1080), FPS = +(args.fps || 30);
+const W = +(args.w || 1080), H = +(args.h || 1920), FPS = +(args.fps || 30);
 const OUT = path.resolve(args.out || path.join(ROOT, 'out'));
 fs.mkdirSync(OUT, { recursive: true });
 
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.woff2': 'font/woff2', '.json': 'application/json' };
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(new URL(req.url, 'http://x').pathname));
   if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -37,7 +37,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const page = await browser.newPage({ viewport: { width: Math.min(W, 1920), height: Math.min(H, 1080) } });
+const page = await browser.newPage({ viewport: { width: Math.min(W, 1920), height: Math.min(H, 1920) } });
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[page]', m.type(), m.text().slice(0, 400)); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 const threeLocal = fs.readFileSync(path.join(ROOT, 'node_modules/three/build/three.module.min.js'));

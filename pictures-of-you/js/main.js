@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { Polaroid, CARD_W, CARD_H } from './polaroid.js';
-import { buildTextField, loadFont } from './textField.js';
+import { Polaroid, CARD_W, CARD_H, IMG } from './polaroid.js';
+const IMG_X0 = IMG.x0, IMG_Y0 = IMG.y0, IMG_W = IMG.x1 - IMG.x0;
+import { LightText } from './lightText.js';
 import { lightingUniforms, MAX_FIRE_LIGHTS } from './lighting.js';
 import { makeTable } from './table.js';
 import { FireFluid } from './fluid.js';
@@ -22,12 +23,11 @@ const STACK = [
 ];
 
 export class LyricVideo {
-  constructor(canvas, { width = 1920, height = 1080, capture = false, fontUrl = 'fonts/cormorant-garamond-latin-600-italic.woff2' } = {}) {
-    this.canvas = canvas; this.W = width; this.H = height; this.capture = capture; this.fontUrl = fontUrl;
+  constructor(canvas, { width = 1080, height = 1920, capture = false } = {}) {
+    this.canvas = canvas; this.W = width; this.H = height; this.capture = capture;
   }
 
   async init() {
-    await loadFont(this.fontUrl);
     const W = this.W, H = this.H;
     const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, alpha: false, preserveDrawingBuffer: this.capture, powerPreference: 'high-performance' });
     renderer.setPixelRatio(1);
@@ -40,7 +40,7 @@ export class LyricVideo {
     this.lighting = this.shared.lighting;
 
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(30, W / H, 1, 400);
+    this.camera = new THREE.PerspectiveCamera(40, W / H, 1, 400);
     this.table = makeTable(this.lighting);
     this.table.mesh.renderOrder = 20;
     this.scene.add(this.table.mesh);
@@ -49,9 +49,8 @@ export class LyricVideo {
     const defs = await TL.loadPolaroids();
     this.prints = defs.map((def, i) => {
       const words = TL.wordsFor(def);
-      const field = buildTextField(words, { jitter: [-0.08 + 0.05 * i, 0.10, -0.03, 0.06] });
-      const p = new Polaroid({ seed: 1.37 + i * 2.91, field, words, shared: this.shared });
-      p.field = field;
+      const light = new LightText(renderer, words, 3.1 + i * 1.7);
+      const p = new Polaroid({ seed: 1.37 + i * 2.91, light, shared: this.shared });
       const [x, y, z, yaw] = STACK[i];
       p.home = { x, y, z, yaw: THREE.MathUtils.degToRad(yaw) };
       p.mesh.position.set(x, y, z);
@@ -71,7 +70,7 @@ export class LyricVideo {
     for (let i = 0; i < 13; i++) {
       const src = this.prints[i % 4];
       const ghost = fr() < 0.5;
-      const p = new Polaroid({ seg: [26, 32], seed: 11.3 + i * 1.77, field: ghost ? src.field : null, words: ghost ? src.words : [], shared: this.shared });
+      const p = new Polaroid({ seg: [26, 32], seed: 11.3 + i * 1.77, light: ghost ? src.light : this.noLight(), shared: this.shared });
       p.uniforms.uGhost.value = ghost ? 0.35 + fr() * 0.3 : 0;
       const t0 = TL.FLOURISH + 0.9 + i * 0.52 + fr() * 0.4;
       // depth along the view: mostly mid-air beyond the hero print, a couple whip past the lens
@@ -113,6 +112,15 @@ export class LyricVideo {
     for (const p of [...this.prints, ...this.flyers]) p.bake(renderer);
     this.reset(TL.VIDEO_START);
     return this;
+  }
+
+  noLight() {
+    if (!this._blank) {
+      const tex = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType);
+      tex.needsUpdate = true;
+      this._blank = { textures: { expo: tex, glow: tex, hal: tex }, base: 0 };
+    }
+    return this._blank;
   }
 
   reset(t) {
@@ -204,6 +212,24 @@ export class LyricVideo {
 
     for (const p of all) p.mesh.updateMatrixWorld();
 
+    // light pens: expose the film up to now, place the glowing tip
+    const penLight = this.lighting.uPenLight.value;
+    penLight.w = 0;
+    for (const p of this.prints) {
+      p.light.update(t);
+      const pen = p.light.pen(t);
+      const prev = p.light.pen(t - 1 / 60);     // half a frame earlier: 180° shutter
+      const u = p.uniforms.uPen.value;
+      if (pen) {
+        u.set(pen.x, pen.y, pen.I * (0.92 + 0.08 * noise1(t * 30, 41)), p.light.sigma);
+        p.uniforms.uPenPrev.value.set(prev ? prev.x : pen.x, prev ? prev.y : pen.y);
+        // world position of the tip, a few mm above the film
+        const lx = IMG_X0 + pen.x * IMG_W, ly = IMG_Y0 + pen.y * IMG_W;
+        const wpos = new THREE.Vector3(lx, ly, 0.35).applyMatrix4(p.mesh.matrixWorld);
+        penLight.set(wpos.x, wpos.y, wpos.z, 0.55 * pen.I);
+      } else u.z = 0;
+    }
+
     // spawn sparks / ash from burn fronts, gather fire lights
     for (const p of all) {
       if (!p.mesh.visible || !p.ign.length || p.uniforms.uBurning.value < 0.5 || !p.grid) continue;
@@ -290,7 +316,7 @@ export class LyricVideo {
 
     // fluid wind in grid cells / s (screen-space approximation of world wind)
     // world cm/s -> screen heights/s (roughly 13 cm of table per screen height)
-    this.fluid.wind.set(wind.x / 13, (wind.y - wind.z * 0.3) / 13);
+    this.fluid.wind.set(wind.x / 20, (wind.y - wind.z * 0.3) / 20);
 
     this.prevT = t;
   }
@@ -317,11 +343,13 @@ export class LyricVideo {
     // half-follow the rising print
     const follow = 0.5 * smooth(TL.FLOURISH + 0.3, TL.FLOURISH + 3.5, t) * (1 - 0.6 * smooth(TL.FLOURISH + 6.0, TL.FLOURISH + 11.0, t));
     if (follow > 0) target.lerp(this.prints[3].mesh.position, follow);
-    const dist = lerp(26.0, 22.5, v) + fl * 26.0 + end * 4.0;
+    const dist = lerp(30.0, 26.5, v) + fl * 24.0 + end * 4.0;
     const elev = THREE.MathUtils.degToRad(lerp(55, 50, v) - fl * 12 - end * 14);
     const azim = THREE.MathUtils.degToRad(lerp(-5, 3, v) + fl * 6 + end * 6);
     target.y += fl * 3.0 + end * 7.0;
-    const fov = 30 + fl * 8;
+    // vertical frame: sit the print in the lower part, leave the sky for flames
+    target.z -= 1.8 * (1 - fl);
+    const fov = 40 + fl * 8;
     if (Math.abs(this.camera.fov - fov) > 1e-4) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
     this.lighting.uPoolScale.value = 1 + fl * 1.3;
     // handheld drift
@@ -341,7 +369,8 @@ export class LyricVideo {
     this.baseCam = { pos: cam.position.clone(), fwd, right, up };
     cam.lookAt(target.x + jx + kick * noise1(t * 20, 21), target.y + jy + kick * noise1(t * 20, 22), target.z);
     cam.updateMatrixWorld();
-    this.focusDist = follow > 0.05 ? cam.position.distanceTo(this.prints[3].mesh.position) : cam.position.distanceTo(target);
+    // focus on the image area of the print on top (the words), not the look target
+    this.focusDist = follow > 0.05 ? cam.position.distanceTo(this.prints[3].mesh.position) : cam.position.distanceTo(this.focusTarget(t));
     // key-light shadow camera follows the stack
     const L = this.lighting.uKeyDir.value;
     const c0 = new THREE.Vector3(0, 0, 0);

@@ -5,9 +5,16 @@ version, *Disintegration*, 7:28). It is rendered entirely in WebGL from
 procedural shaders: there are no stock images or footage.
 
 * Four blank instant-film prints lie loosely stacked on a dark walnut table under one lamp.
-* Each sung word develops on the top print as if light had exposed the film.
-  The word starts as a cold cyan latent image, grows out of its stroke centres
-  with uneven chemistry and halation, then warms to cream as it develops.
+* Each sung word is written onto the top print by a moving point of light, as
+  in a long-exposure light painting. The letters are basic monoline shapes
+  built from lines and elliptical arcs, not a font. The pen follows natural
+  handwriting speed (slower through tight curves, easing in and out), with a
+  slight hand wobble, and lifts between strokes. Each pass deposits Gaussian
+  exposure on the film in proportion to how long the light lingers. Scatter
+  inside the emulsion and red halation off the film base are derived from
+  that exposure, and a film response curve maps it to the print, so overlaps
+  and held dots burn through to cream-white. The fresh trail blazes, then
+  develops chemically from a cold latent image to warm cream.
 * Each print then catches fire: the paper scorches straw to amber to brown, the
   emulsion blisters and its dyes cook, and a ragged ember front advances. Black
   char curls up and crumbles to ash. Flames come from a 2-D fluid solve seeded
@@ -33,7 +40,7 @@ bars per line, and the interlude starts on the bar line at 137.94 s.
 Words inside a line are spread by syllable across the sung span of the line.
 If anything feels early or late, nudge a line's `t` or `span`.
 
-The video covers song time 1:51.2 → 2:35.6.
+The video is vertical, 1080×1920 (9:16), and covers song time 1:51.2 → 2:35.6.
 
 ## Watch it live (with sound)
 
@@ -57,9 +64,9 @@ npm install
 ```
 
 ```bash
-node render.mjs                                    # out/pictures.mp4, 1920x1080 @ 30 fps, silent
+node render.mjs                                    # out/pictures.mp4, 1080x1920 @ 30 fps, silent
 node render.mjs --audio "07 Pictures of You.m4a"   # mux your copy of the album track
-node render.mjs --w 960 --h 540                    # quick preview
+node render.mjs --w 540 --h 960                    # quick preview
 node render.mjs --stills 114.6,118.9,139.2         # PNG stills at song times
 node render.mjs --from 116 --to 121                # a time range only
 ```
@@ -80,7 +87,8 @@ ffmpeg -i out/pictures.mp4 -ss 111.2 -i "Pictures of You.m4a" \
 | file | what |
 | --- | --- |
 | `js/timing.js` | song timeline: lines, word syllables, burn ignitions, flourish |
-| `js/textField.js` | lays out each print's words and builds a signed-distance field plus a per-word index |
+| `js/lightGlyphs.js` | the stroke alphabet (lines and arcs), word layout, and the light pen's path, speed and timing |
+| `js/lightText.js` | accumulates the pen's exposure on the film on the GPU, plus emulsion scatter and halation |
 | `js/polaroid.js` | print geometry and deformation, plus the develop, burn, char and ember shading; bakes static noise and the burn field |
 | `js/fluid.js` | screen-space smoke and fire solver (stable fluids with vorticity confinement) |
 | `js/particles.js` | motion-blurred sparks and tumbling ash flakes with ember edges |
@@ -90,4 +98,3 @@ ffmpeg -i out/pictures.mp4 -ss 111.2 -i "Pictures of You.m4a" \
 | `js/main.js` | scene director: stack, camera, burns, gust, flying prints |
 | `render.mjs` | headless frame renderer that pipes into ffmpeg |
 
-Font: Cormorant Garamond (SIL Open Font License), in `fonts/`.

@@ -9,7 +9,7 @@
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
   body { display: flex; flex-direction: column; }
   #stage { flex: 1; display: grid; place-items: center; min-height: 0; padding: 12px 16px 0; }
-  canvas { width: 100%; max-height: 100%; aspect-ratio: 16 / 9; object-fit: contain; background: #000; display: block; max-width: calc((100vh - 120px) * 16 / 9); }
+  canvas { height: calc(100vh - 110px); max-width: 100%; aspect-ratio: var(--ar, 9 / 16); background: #000; display: block; }
   #bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
   button, input[type=number] { background: #151413; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; font: inherit; }
   button:hover { border-color: #4a4640; }
@@ -38,7 +38,8 @@ import * as TL from './js/timing.js';
 const qs = new URLSearchParams(location.search);
 const capture = qs.has('capture');
 if (capture) document.body.classList.add('capture');
-const W = +(qs.get('w') || 1920), H = +(qs.get('h') || 1080);
+const W = +(qs.get('w') || 1080), H = +(qs.get('h') || 1920);
+document.documentElement.style.setProperty('--ar', `${W} / ${H}`);
 const canvas = document.getElementById('c');
 const app = new LyricVideo(canvas, { width: W, height: H, capture });
 if (qs.has('msaa')) app.msaa = +qs.get('msaa');
