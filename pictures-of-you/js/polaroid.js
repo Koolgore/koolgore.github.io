@@ -132,6 +132,7 @@ uniform vec2 uPenPrev;         // tip position half a frame earlier (motion blur
 uniform float uTauBase;
 uniform float uTextGain;
 uniform float uGhost;          // >0 for flying prints: long-developed, faint
+uniform vec4 uLeak;            // edge fog: amount, direction (x,y), unused
 uniform float uDepthScale;
 
 void main() {
@@ -165,7 +166,8 @@ void main() {
   // paper/plastic frame
   vec4 det = texture(uDetail, vUv);
   float grain = det.r;
-  vec3 frameCol = vec3(0.86, 0.845, 0.80) * (0.965 + 0.05 * grain);
+  vec3 frameCol = vec3(0.86, 0.85, 0.865) * (0.965 + 0.05 * grain);
+  frameCol *= 1.0 - 0.35 * smoothstep(0.80, 0.86, grain) * smoothstep(0.4, 0.7, det.g);   // grime specks
   // slight aging toward the outer edge and handling smudges
   float rim = smoothstep(0.55, 0.0, min(CARD.x * 0.5 - abs(p.x), CARD.y * 0.5 - abs(p.y)));
   frameCol *= mix(vec3(1.0), vec3(0.93, 0.90, 0.82), rim * 0.6);
@@ -176,7 +178,7 @@ void main() {
   // undeveloped/black instant film emulsion
   vec2 tuv = (p - IMG.xy) / (IMG.zw - IMG.xy);
   float mott = det.b;
-  vec3 emul = vec3(0.010, 0.013, 0.019) * (0.75 + 0.5 * mott);
+  vec3 emul = vec3(0.016, 0.008, 0.005) * (0.75 + 0.5 * mott);
   // reagent spread irregularity along the edges of the image
   float reag = smoothstep(0.16, 0.0, edgeD + (det.a - 0.5) * 0.14);
   emul = mix(emul, vec3(0.035, 0.030, 0.022), reag * 0.6);
@@ -186,47 +188,58 @@ void main() {
   vec3 textAlb = vec3(0.0);
   if (inImg > 0.5) {
     vec4 ex = texture(uExpo, tuv);
-    vec4 gw = texture(uGlow, tuv);
-    vec4 hl = texture(uHal, tuv);
-    float Ed = ex.r, Eg = gw.r, Eh = hl.r;
-    // when was this bit of film exposed? (exposure-weighted pen time)
-    float tau = Ed > 2e-3 ? ex.g / Ed : (Eg > 2e-4 ? gw.g / Eg : (Eh > 1e-5 ? hl.g / Eh : 0.0));
+    float Ed = ex.r;
+    float tau0 = Ed > 2e-3 ? ex.g / Ed : -1.0;
+    // ragged, flame-licked scatter: the glow is read through an upward-biased noisy
+    // displacement, so it breaks into tongues that mostly lick upward. While a
+    // word is fresh the tongues rise and flicker; they freeze as the print develops.
+    vec4 gw0 = texture(uGlow, tuv);
+    float tauG = gw0.r > 2e-4 ? gw0.g / gw0.r : 0.0;
+    float ageG = uTime - (uTauBase + (tau0 >= 0.0 ? tau0 : tauG));
+    if (uGhost > 0.0) ageG = 9.0;
+    float rise = clamp(ageG, 0.0, 1.4);
+    vec4 tn = texture(uTextNoise, tuv + vec2(0.0, -0.05 * rise));
+    vec2 jit = tn.ba - 0.5;
+    vec2 off = jit * vec2(0.020, 0.030) + vec2(0.0, -0.010);
+    float Eg = texture(uGlow, tuv + off).r;
+    float Eh = texture(uHal, tuv + off * 2.2 + vec2(0.0, -0.012)).r;
+    float stri = 0.45 + 1.1 * smoothstep(0.30, 0.75, tn.g);      // vertical flame striations
+    float tau = tau0 >= 0.0 ? tau0 : tauG;
     float age = uTime - (uTauBase + tau);
     if (uGhost > 0.0) age = 9.0;
-    vec4 tn = texture(uTextNoise, tuv);
-    // total exposure reaching the dye layers: direct + scattered
-    float X = Ed + 0.18 * Eg + 0.06 * Eh;
-    X *= 0.88 + 0.24 * tn.r;                       // uneven reagent spread
-    // developed positive: warm light vs. the three dye layers' sensitivities,
-    // shoulder rolls overexposed cores to the film's creamy white
-    vec3 Sens = vec3(1.45, 1.05, 0.66);
-    float Xt = max(X - 0.07, 0.0);                 // film toe: faint scatter doesn't register
-    vec3 pos = 1.0 - exp(-Xt * Sens * 1.5);
-    pos = mix(pos, vec3(1.0, 0.96, 0.88), smoothstep(1.2, 4.0, X) * 0.75);
-    vec3 halation = vec3(1.0, 0.30, 0.10) * max(Eh * 0.6 + Eg * 0.06 - 0.01, 0.0);
-    // chemistry: latent, cold and murky first, colours arrive as it develops
+    // total exposure: the stroke itself plus scattered light
+    float X = Ed + (0.85 * Eg + 0.55 * Eh) * stri;
+    X *= 0.85 + 0.3 * tn.r;                        // uneven reagent spread
+    // edge fogging: stray light leaking in from one side as the line is exposed
+    vec2 ctr = (p - 0.5 * (IMG.xy + IMG.zw)) / (0.5 * (IMG.zw - IMG.xy));
+    float side = 0.35 + 0.65 * smoothstep(-0.6, 1.0, dot(normalize(ctr + 1e-4), uLeak.yz));
+    X += uLeak.x * side * exp(-edgeD / 0.22) * (0.30 + 0.9 * det.a) * (0.6 + 0.8 * tn.g);
+    float Xt = max(X - 0.03, 0.0);
+    // warm light on instant film: the red layer saturates first, so the scale runs
+    // black -> deep red -> orange -> amber -> white, and the hottest cores clip to a
+    // faintly lavender white
+    vec3 pos = 1.0 - exp(-Xt * vec3(2.6, 1.0, 0.26) * 1.25);
+    pos = mix(pos, vec3(1.0, 0.95, 0.98), smoothstep(2.2, 5.0, X) * 0.85);
+    // chemistry: a dim, cold latent image first; colour arrives as it develops
     float seen = smoothstep(-0.01, 0.05, age);
-    float dev = smoothstep(0.10, 2.8, age);
-    vec3 latentCol = vec3(0.32, 0.55, 0.80) * (1.0 - exp(-Xt * 1.1)) * 0.45;
-    vec3 print = mix(latentCol, pos + halation * 0.35, dev) * seen;
-    print *= 0.94 + 0.12 * (tn.g - 0.5);
-    textAlb = print * 0.9;
-    // the light itself: blazing as it's laid down, then a faint afterglow
-    float live = (0.65 * exp(-max(age, 0.0) / 0.10) + 0.35 * exp(-max(age, 0.0) / 0.45)) * seen;
-    float after = (0.16 + 0.40 * exp(-max(age, 0.0) / 1.3)) * seen;
-    vec3 lightCol = vec3(1.0, 0.93, 0.82);
-    textEmit = lightCol * (Ed * 2.2 + Eg * 0.45 + Eh * 0.12) * live
-             + (pos * smoothstep(0.05, 0.6, Ed + 0.1 * Eg) + halation * 0.5) * after * 0.55;
-    // the pen tip: a hot point with a soft corona
-    // distance to the tip's path during the shutter (motion-blurred streak)
+    float dev = smoothstep(0.10, 2.6, age);
+    vec3 latentCol = vec3(0.30, 0.42, 0.62) * (1.0 - exp(-Xt * 0.9)) * 0.45;
+    vec3 print = mix(latentCol, pos, dev) * max(seen, step(0.001, uLeak.x) * 0.0 + seen);
+    textAlb = print * 0.95;
+    // the light itself: blazing as it's laid down, then the print keeps a hot afterglow
+    float live = (0.6 * exp(-max(age, 0.0) / 0.10) + 0.4 * exp(-max(age, 0.0) / 0.5)) * seen;
+    float after = (0.45 + 0.45 * exp(-max(age, 0.0) / 1.5)) * seen;
+    textEmit = vec3(1.0, 0.92, 0.80) * (Ed * 1.6 + Eg * 0.8 * stri) * live
+             + pos * pos * after * 0.9;
+    // the pen tip: hot point, motion-blurred across the shutter, soft corona
     vec2 pa = uPenPrev * 1024.0, pb = uPen.xy * 1024.0, pp = tuv * 1024.0;
     vec2 ab = pb - pa;
     float hseg = clamp(dot(pp - pa, ab) / max(dot(ab, ab), 1e-4), 0.0, 1.0);
     vec2 dp = pp - (pa + ab * hseg);
     float d2 = dot(dp, dp);
-    float streak = 1.0 / (1.0 + length(ab) / (uPen.w * 3.0));   // energy spreads along the streak
     float rr = uPen.w;
-    textEmit += vec3(1.0, 0.97, 0.92) * uPen.z * (9.0 * streak * exp(-d2 / (2.0 * rr * rr * 1.7)) + 0.9 * exp(-sqrt(d2) / (rr * 5.0)));
+    float streak = 1.0 / (1.0 + length(ab) / (rr * 1.5));
+    textEmit += vec3(1.0, 0.95, 0.88) * uPen.z * (7.0 * streak * exp(-d2 / (rr * rr * 0.8)) + 0.8 * exp(-sqrt(d2) / (rr * 2.5)));
     textEmit *= uTextGain;
     if (uGhost > 0.0) { textAlb *= uGhost; textEmit *= uGhost * 0.5; }
   }
@@ -358,6 +371,7 @@ export class Polaroid {
       uHal: { value: light ? light.textures.hal : null },
       uPen: { value: new THREE.Vector4(0, 0, 0, 3) },
       uPenPrev: { value: new THREE.Vector2(0, 0) },
+      uLeak: { value: new THREE.Vector4(0, -1, 0.3, 0) },
       uTauBase: { value: light ? light.base : 0 },
       uTextGain: { value: 1 },
       uGhost: { value: 0 },
@@ -395,7 +409,10 @@ export class Polaroid {
         varying vec2 vUv; uniform float uSeed;
         void main() {
           vec2 tuv = vUv;
-          gl_FragColor = vec4(fbm2(tuv * 24.0 + uSeed * 2.0, 3), fbm2(tuv * 14.0 + uSeed, 3), gnoise(tuv * 160.0), 1.0);
+          float streak = fbm2(tuv * vec2(64.0, 9.0) + uSeed * 3.0, 3);
+          float jx = fbm2(tuv * 30.0 + uSeed, 4);
+          float jy = fbm2(tuv * 30.0 + uSeed + vec2(13.7, 5.1), 4);
+          gl_FragColor = vec4(fbm2(tuv * 24.0 + uSeed * 2.0, 3), streak, jx, jy);
         }`, { uSeed: { value: 0 } });
     }
     // burn field (relative to the earliest ignition so half floats keep precision)

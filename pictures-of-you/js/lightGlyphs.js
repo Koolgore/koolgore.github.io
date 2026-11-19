@@ -60,12 +60,12 @@ function samplePrim(p, out) {
 }
 
 // Lay out rows of words into the film square (px, y up) and write them with light.
-// words: [{text, row, onset}] ; returns {splats: Float32Array(x,y,w,tau), strokes, sigma, xh}
+// words: [{text, row, onset}] ; returns {splats: Float32Array(x,y,w,tau), radii: Float32Array, strokes, sigma, xh}
 export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
   const rng = mulberry32(Math.floor(seed * 1e6) ^ 0x5bd1e995);
   const rows = [];
   for (const w of words) (rows[w.row] ||= []).push(w);
-  const LETTER_GAP = 0.17, SPACE = 0.62, SLANT = 0.07;
+  const LETTER_GAP = 0.32, SPACE = 0.9, SLANT = 0.05;
   const wordWidth = (w) => [...w.text].reduce((a, ch, i) => a + ((glyphFor(ch) || { w: 0.5 }).w) + (i ? LETTER_GAP : 0), 0);
   const rowWidth = (r) => r.reduce((a, w, i) => a + wordWidth(w) + (i ? SPACE : 0), 0);
   const pitch = 2.55;
@@ -112,8 +112,8 @@ export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
   });
 
   // ---- resample, wobble, velocity profile
-  const DS = 0.6;                         // px between samples
-  const sigma = 0.030 * xh;               // light-spot radius on the film
+  const DS = 0.8;                         // px between samples
+  const sigma = 0.125 * xh;               // light-spot radius on the film (flat-topped, thick)
   const prepared = wordStrokes.map((strokes) => strokes.map((st) => {
     if (st.dot) return st;
     const src = st.pts;
@@ -174,7 +174,9 @@ export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
   for (const pl of plans) for (const st of pl.strokesW) if (!st.dot) for (let i = 1; i < st.pts.length; i++) vrefAll.push(st.v[i] / pl.f);
   vrefAll.sort((a, b) => a - b);
   const vref = vrefAll[Math.floor(vrefAll.length / 2)] || 300;
-  const norm = 2.0 / (Math.sqrt(2 * Math.PI) * sigma);   // nominal stroke core ≈ 2.4 exposure units
+  // spot profile exp(-(d/r)^4): line integral ≈ 1.813 r; nominal stroke core ≈ 3 exposure units
+  const norm = 3.0 / (1.813 * sigma);
+  const radii = [];
 
   for (const pl of plans) {
     let t = pl.t0;
@@ -189,6 +191,7 @@ export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
       if (st.dot) {
         const [x, y] = st.pts[0];
         splats.push(x, y, 5.0, t + T.dot * 0.5);       // a held dot burns in hot
+        radii.push(sigma * 1.25);
         strokes.push({ t0: t, t1: t + T.dot, pts: [[x, y]], taus: [t] });
         t += T.dot;
         return;
@@ -196,6 +199,7 @@ export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
       // the light clicks on a beat before the hand moves: a hot dwell at the start
       const t0 = t;
       splats.push(st.pts[0][0], st.pts[0][1], 0.7, t + T.on * 0.5);
+      radii.push(sigma * 1.05);
       t += T.on;
       const taus = [t];
       for (let i = 1; i < st.pts.length; i++) {
@@ -204,16 +208,19 @@ export function writeWithLight(words, { size = 1024, seed = 1 } = {}) {
         t += dt;
         taus.push(t);
         const flick = 1 + 0.04 * Math.sin(t * 47.0) * Math.sin(t * 13.0);
-        splats.push(st.pts[i][0], st.pts[i][1], DS * Math.min(4, Math.max(0.35, vr / vel)) * norm * flick, t);
+        const rr = sigma * (0.86 + 0.28 * (0.5 + 0.5 * noise1(t * 3.1, 77)) + 0.06 * noise1(t * 17.0, 78));
+        splats.push(st.pts[i][0], st.pts[i][1], DS * Math.min(4, Math.max(0.35, vr / vel)) * norm * flick * (sigma / rr), t);
+        radii.push(rr);
       }
       // and lingers a moment at the end before it's switched off
       const lp = st.pts[st.pts.length - 1];
       splats.push(lp[0], lp[1], 0.45, t + T.off * 0.5);
+      radii.push(sigma);
       t += T.off;
       strokes.push({ t0, t1: t, pts: st.pts, taus: [t0, ...taus.slice(1)], });
     });
   }
-  return { splats: new Float32Array(splats), strokes, sigma, xh, size };
+  return { splats: new Float32Array(splats), radii: new Float32Array(radii), strokes, sigma, xh, size };
 }
 
 function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }

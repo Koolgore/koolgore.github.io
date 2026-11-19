@@ -36,16 +36,18 @@ export class LightText {
     const g = new THREE.InstancedBufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, 1, 0], 3));
     g.setAttribute('iS', new THREE.InstancedBufferAttribute(data, 4));
+    g.setAttribute('iR', new THREE.InstancedBufferAttribute(res.radii, 1));
     g.instanceCount = n;
     this.mat = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       uniforms: { uT: { value: 0 }, uSigma: { value: this.sigma }, uSize: { value: SIZE } },
       vertexShader: /* glsl */ `
-        attribute vec4 iS;
+        attribute vec4 iS; attribute float iR;
         uniform float uT, uSigma, uSize;
-        varying vec2 vD; varying float vW; varying float vTau;
+        varying vec2 vD; varying float vW; varying float vTau; varying float vR;
         void main() {
-          float r = uSigma * 3.3;
+          vR = iR;
+          float r = iR * 1.7;
           vD = position.xy * r;
           vW = iS.z; vTau = iS.w;
           vec2 px = iS.xy + vD;
@@ -53,9 +55,10 @@ export class LightText {
         }`,
       fragmentShader: FRAG_OUT + /* glsl */ `
         uniform float uSigma;
-        varying vec2 vD; varying float vW; varying float vTau;
+        varying vec2 vD; varying float vW; varying float vTau; varying float vR;
         void main() {
-          float k = exp(-dot(vD, vD) / (2.0 * uSigma * uSigma)) * vW;
+          float q = dot(vD, vD) / (vR * vR);
+          float k = exp(-q * q) * vW;            // flat-topped spot with a soft shoulder
           gl_FragColor = vec4(k, k * vTau, 0.0, 0.0);
         }`,
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
@@ -109,7 +112,8 @@ export class LightText {
     down.uniforms.uSrc.value = this.q2.texture; down.uniforms.uTx.value.set(1 / 512, 1 / 512);
     down.render(r, this.q1);
     // glow: ~10 px at film resolution
-    this.blur(this.q1, this.q2, 256, 1.6);
+    this.blur(this.q1, this.q2, 256, 1.8);
+    this.blur(this.q1, this.q2, 256, 2.4);
     // halation: wider, from a further downsample
     down.uniforms.uSrc.value = this.q1.texture; down.uniforms.uTx.value.set(0.5 / 256, 0.5 / 256);
     down.render(r, this.e1);

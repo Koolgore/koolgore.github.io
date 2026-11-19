@@ -51,6 +51,8 @@ export class LyricVideo {
       const words = TL.wordsFor(def);
       const light = new LightText(renderer, words, 3.1 + i * 1.7);
       const p = new Polaroid({ seed: 1.37 + i * 2.91, light, shared: this.shared });
+      const la = [-2.6, 2.2, -0.4, 3.6][i];
+      p.uniforms.uLeak.value.set(0, Math.cos(la), Math.sin(la), 0);
       const [x, y, z, yaw] = STACK[i];
       p.home = { x, y, z, yaw: THREE.MathUtils.degToRad(yaw) };
       p.mesh.position.set(x, y, z);
@@ -220,6 +222,9 @@ export class LyricVideo {
       const pen = p.light.pen(t);
       const prev = p.light.pen(t - 1 / 60);     // half a frame earlier: 180° shutter
       const u = p.uniforms.uPen.value;
+      // stray light fogs the edges as the line is exposed
+      const prog = smooth(p.light.tStart, p.light.tEnd, t);
+      p.uniforms.uLeak.value.x = 0.9 * prog;
       if (pen) {
         u.set(pen.x, pen.y, pen.I * (0.92 + 0.08 * noise1(t * 30, 41)), p.light.sigma);
         p.uniforms.uPenPrev.value.set(prev ? prev.x : pen.x, prev ? prev.y : pen.y);
