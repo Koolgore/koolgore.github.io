@@ -111,14 +111,12 @@ export class LightText {
     down.render(r, this.q2);
     down.uniforms.uSrc.value = this.q2.texture; down.uniforms.uTx.value.set(1 / 512, 1 / 512);
     down.render(r, this.q1);
-    // glow: ~10 px at film resolution
-    this.blur(this.q1, this.q2, 256, 1.8);
-    this.blur(this.q1, this.q2, 256, 2.4);
-    // halation: wider, from a further downsample
+    // emulsion scatter: tight, ~5 px at film resolution
+    this.blur(this.q1, this.q2, 256, 1.1);
+    // halation: a fairly tight red bleed (~16 px), from a further downsample
     down.uniforms.uSrc.value = this.q1.texture; down.uniforms.uTx.value.set(0.5 / 256, 0.5 / 256);
     down.render(r, this.e1);
-    this.blur(this.e1, this.e2, 128, 2.2);
-    this.blur(this.e1, this.e2, 128, 3.0);
+    this.blur(this.e1, this.e2, 128, 1.4);
     r.setRenderTarget(null);
     r.setClearColor(0x000000, prevAlpha);
   }

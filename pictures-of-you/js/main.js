@@ -224,14 +224,14 @@ export class LyricVideo {
       const u = p.uniforms.uPen.value;
       // stray light fogs the edges as the line is exposed
       const prog = smooth(p.light.tStart, p.light.tEnd, t);
-      p.uniforms.uLeak.value.x = 0.9 * prog;
+      p.uniforms.uLeak.value.x = 0.35 * prog;
       if (pen) {
         u.set(pen.x, pen.y, pen.I * (0.92 + 0.08 * noise1(t * 30, 41)), p.light.sigma);
         p.uniforms.uPenPrev.value.set(prev ? prev.x : pen.x, prev ? prev.y : pen.y);
         // world position of the tip, a few mm above the film
         const lx = IMG_X0 + pen.x * IMG_W, ly = IMG_Y0 + pen.y * IMG_W;
         const wpos = new THREE.Vector3(lx, ly, 0.35).applyMatrix4(p.mesh.matrixWorld);
-        penLight.set(wpos.x, wpos.y, wpos.z, 0.55 * pen.I);
+        // (no visible pen: the light only shows up in the developed film)
       } else u.z = 0;
     }
 
