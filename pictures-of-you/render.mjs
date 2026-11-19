@@ -1,7 +1,7 @@
 // Headless, deterministic renderer.
 //
 //   node render.mjs                         full video (1080x1920) -> out/pictures.mp4
-//   node render.mjs --w 540 --h 960         quick low-res pass
+//   node render.mjs --w 540 --h 960         quick low-res pass (add --emures 768 to speed up the text sim)
 //   node render.mjs --stills 114,118.6      PNG stills (simulation warms up 2.5 s before each)
 //   node render.mjs --from 116 --to 121     render a time range (song seconds)
 //   node render.mjs --audio song.m4a        mux YOUR copy of the album track into the mp4
@@ -43,7 +43,7 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 const threeLocal = fs.readFileSync(path.join(ROOT, 'node_modules/three/build/three.module.min.js'));
 await page.route(/cdn\.jsdelivr\.net\/npm\/three@[^/]+\/build\/three\.module\.min\.js/, (route) =>
   route.fulfill({ status: 200, contentType: 'text/javascript', body: threeLocal }));
-await page.goto(`http://127.0.0.1:${port}/index.html?capture&w=${W}&h=${H}`);
+await page.goto(`http://127.0.0.1:${port}/index.html?capture&w=${W}&h=${H}${args.emures ? `&emures=${args.emures}` : ''}`);
 await page.waitForFunction(() => window.lyricReady || window.lyricError, null, { timeout: 180000 });
 const err = await page.evaluate(() => window.lyricError);
 if (err) { console.error(err); process.exit(1); }

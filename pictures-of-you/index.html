@@ -41,7 +41,7 @@ if (capture) document.body.classList.add('capture');
 const W = +(qs.get('w') || 1080), H = +(qs.get('h') || 1920);
 document.documentElement.style.setProperty('--ar', `${W} / ${H}`);
 const canvas = document.getElementById('c');
-const app = new LyricVideo(canvas, { width: W, height: H, capture });
+const app = new LyricVideo(canvas, { width: W, height: H, capture, emulsionRes: +(qs.get('emures') || 1024) });
 if (qs.has('msaa')) app.msaa = +qs.get('msaa');
 window.lyric = app;
 const status = document.getElementById('status');

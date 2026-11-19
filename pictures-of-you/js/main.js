@@ -35,8 +35,8 @@ const STACK = [
 ];
 
 export class LyricVideo {
-  constructor(canvas, { width = 1080, height = 1920, capture = false } = {}) {
-    this.canvas = canvas; this.W = width; this.H = height; this.capture = capture;
+  constructor(canvas, { width = 1080, height = 1920, capture = false, emulsionRes = 1024 } = {}) {
+    this.canvas = canvas; this.W = width; this.H = height; this.capture = capture; this.emulsionRes = emulsionRes;
   }
 
   async init() {
@@ -68,6 +68,7 @@ export class LyricVideo {
       // each print develops its own emulsion (photochemical text sim) over its photo
       const emulsion = new PrintEmulsion(words, {
         seed: 4.2 + i * 3.7,
+        res: this.emulsionRes,
         photo: photos[i],
         params: { fontSize: 118, textYOffset: -0.02, bgIntensity: 0.55, ...LEAKS[i] },   // the sim centres at 0.52; -0.02 = true centre
       });
