@@ -57,12 +57,11 @@ export class LyricVideo {
     const photos = await Promise.all(PHOTOS.map((n) => loadPhoto(`assets/photos/${n}_${PHOTO_SET}.jpg`)));
     this.prints = defs.map((def, i) => {
       const words = TL.wordsFor(def);
-      const rows = def.rows.length;
       // each print develops its own emulsion (photochemical text sim) over its photo
       const emulsion = new PrintEmulsion(words, {
         seed: 4.2 + i * 3.7,
         photo: photos[i],
-        params: { fontSize: 118, textYOffset: rows > 3 ? 0.13 : 0.17, bgIntensity: 0.55 },
+        params: { fontSize: 118, textYOffset: -0.02, bgIntensity: 0.55 },   // the sim centres at 0.52; -0.02 = true centre
       });
       const p = new Polaroid({ seed: 1.37 + i * 2.91, shared: this.shared });
       p.emulsion = emulsion;
