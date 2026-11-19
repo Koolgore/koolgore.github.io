@@ -99,3 +99,11 @@ ffmpeg -i out/pictures.mp4 -ss 111.2 -i "Pictures of You.m4a" \
 | `js/main.js` | scene director: stack, camera, burns, gust, flying prints |
 | `render.mjs` | headless frame renderer that pipes into ffmpeg |
 
+## Photo credit
+
+The photographs under the words (`assets/photos/`) are by **Iván Santiesteban** (Flickr), licensed
+**CC BY**, via Openverse. They have been cropped to square, and the `_scribbled` versions have
+the face scribbled over. CC BY requires attribution wherever the video is published, so credit
+the photographer in the video's description or end card, note the license, and say the images were modified.
+Switch between the scribbled and original versions with `PHOTO_SET` in `js/main.js`.
+

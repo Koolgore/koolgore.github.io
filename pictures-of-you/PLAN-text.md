@@ -10,6 +10,7 @@ The user supplied a ready-made photochemical text engine, vendored in `vendor/po
 * the sim's vertical "roller shaft" streaks could read as flame, so consider lowering `streakStrength`
 * a per-frame render cost check
 * review of the burn and finale in 9:16
+* each print's photo (Iván Santiesteban, CC BY; scribbled set by default) develops under the words. The video needs a photo credit.
 
 ## Where things stood before that
 

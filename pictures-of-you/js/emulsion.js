@@ -15,9 +15,15 @@ export function loadEmulsionFont(url = 'vendor/polaroid-text-sim/fonts/Caveat-Va
   return fontReady;
 }
 
+export function loadPhoto(url) {
+  const img = new Image();
+  img.src = url;
+  return img.decode().then(() => img);
+}
+
 export class PrintEmulsion {
   // words: [{text, row, onset}] in song time
-  constructor(words, { seed = 4.2, res = 1024, develop = 1.7, params = {} } = {}) {
+  constructor(words, { seed = 4.2, res = 1024, develop = 1.7, photo = null, params = {} } = {}) {
     this.canvas = document.createElement('canvas');
     this.canvas.width = res; this.canvas.height = res;
     this.sim = new PolaroidTextSim(this.canvas, {
@@ -35,6 +41,11 @@ export class PrintEmulsion {
     this.t0 = words.length ? Math.min(...words.map((w) => w.onset)) - 0.6 : 0;
     this.t1 = words.length ? Math.max(...words.map((w) => w.onset)) + develop + 1.2 : 0;
     this.sim.setWords(words.map((w) => ({ text: w.text, start: w.onset, duration: develop, line: w.row })));
+    // the photograph underneath the words develops out of the blank print as the line begins
+    this.photo = photo;
+    if (photo) this.sim.setBackgroundImage(photo);
+    this.photoFrom = this.t0 + 0.3;
+    this.photoTo = this.t0 + 4.2;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.NoColorSpace;      // decoded to linear in the print shader
     this.texture.minFilter = THREE.LinearFilter;
@@ -45,7 +56,7 @@ export class PrintEmulsion {
   reset() {
     this.sim.reset();
     this.t = this.t0;
-    this.sim.setParams({ edgeBurn: 0 });
+    this.sim.setParams({ edgeBurn: 0, bgDevelop: 0 });
     this.sim.update(this.t, STEP);
     this.texture.needsUpdate = true;
   }
@@ -59,7 +70,8 @@ export class PrintEmulsion {
       this.t += STEP;
       // stray light fogs the edges as the line is exposed, not before
       const p = Math.min(1, Math.max(0, (this.t - this.t0 - 0.4) / (this.t1 - this.t0 - 1.4)));
-      this.sim.setParams({ edgeBurn: this.edgeBurn * p });
+      const d = Math.min(1, Math.max(0, (this.t - this.photoFrom) / (this.photoTo - this.photoFrom)));
+      this.sim.setParams({ edgeBurn: this.edgeBurn * p, bgDevelop: d * d * (3 - 2 * d) });
       this.sim.update(this.t, STEP);
     }
     this.texture.needsUpdate = true;

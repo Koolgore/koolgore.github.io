@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Polaroid, CARD_W, CARD_H, IMG } from './polaroid.js';
 const IMG_X0 = IMG.x0, IMG_Y0 = IMG.y0, IMG_W = IMG.x1 - IMG.x0;
-import { PrintEmulsion, loadEmulsionFont } from './emulsion.js';
+import { PrintEmulsion, loadEmulsionFont, loadPhoto } from './emulsion.js';
 import { lightingUniforms, MAX_FIRE_LIGHTS } from './lighting.js';
 import { makeTable } from './table.js';
 import { FireFluid } from './fluid.js';
@@ -13,6 +13,10 @@ import * as TL from './timing.js';
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
+
+// photographs under each print's words, in print order
+const PHOTOS = ['kari_01', 'kari_02', 'kari_03', 'kari_04'];
+const PHOTO_SET = 'scribbled';   // or 'sq' for the unscribbled originals
 
 // loose stack, top first: [x, y, z, yaw(deg)]
 const STACK = [
@@ -48,10 +52,18 @@ export class LyricVideo {
     // the four prints
     const defs = await TL.loadPolaroids();
     await loadEmulsionFont();
+    // the photographs under the words, one per print
+    // (photos: Iván Santiesteban, CC BY; set PHOTO_SET to 'sq' for the unscribbled originals)
+    const photos = await Promise.all(PHOTOS.map((n) => loadPhoto(`assets/photos/${n}_${PHOTO_SET}.jpg`)));
     this.prints = defs.map((def, i) => {
       const words = TL.wordsFor(def);
-      // each print develops its own emulsion (photochemical text sim)
-      const emulsion = new PrintEmulsion(words, { seed: 4.2 + i * 3.7 });
+      const rows = def.rows.length;
+      // each print develops its own emulsion (photochemical text sim) over its photo
+      const emulsion = new PrintEmulsion(words, {
+        seed: 4.2 + i * 3.7,
+        photo: photos[i],
+        params: { fontSize: 118, textYOffset: rows > 3 ? 0.13 : 0.17, bgIntensity: 0.55 },
+      });
       const p = new Polaroid({ seed: 1.37 + i * 2.91, shared: this.shared });
       p.emulsion = emulsion;
       p.uniforms.uEmul.value = emulsion.texture;
